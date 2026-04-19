@@ -1,0 +1,90 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rma4rma"
+version = "0.1.0"
+description = "Rapid Motor Adaptation for Robotic Manipulator Arms (RMA²)."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "Yichao Liang" },
+]
+# Runtime deps that are NOT satisfied by the ManiSkill2 / stable-baselines3
+# forks (those are installed separately from the git submodules — see README).
+dependencies = [
+    "numpy",
+    "tensorboard",
+    "transforms3d",
+]
+
+[project.optional-dependencies]
+develop = [
+    "black",
+    "docformatter",
+    "isort",
+    "mypy",
+    "pylint>=2.14.5",
+    "pytest-pylint>=0.18.0",
+    "pytest>=7.2.2",
+]
+
+[project.scripts]
+rma4rma-train = "rma4rma.train:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+rma4rma = ["py.typed"]
+
+[tool.black]
+line-length = 88
+target-version = ["py310"]
+
+[tool.isort]
+py_version = 310
+profile = "black"
+multi_line_output = 2
+skip_glob = ["venv/*", ".venv/*", "ManiSkill2/*", "stable-baselines3/*"]
+split_on_trailing_comma = true
+
+[tool.docformatter]
+line-length = 88
+wrap-summaries = 88
+wrap-descriptions = 88
+
+[tool.mypy]
+strict_equality = true
+warn_unreachable = true
+exclude = [
+    "venv/*",
+    ".venv/*",
+    "ManiSkill2/*",
+    "stable-baselines3/*",
+]
+
+[[tool.mypy.overrides]]
+module = [
+    "gymnasium.*",
+    "mani_skill2.*",
+    "numpy.*",
+    "sapien.*",
+    "sb3_contrib.*",
+    "stable_baselines3.*",
+    "tensorboard.*",
+    "torch.*",
+    "transforms3d.*",
+]
+ignore_missing_imports = true
+
+# Attributes like `_last_obs`, `_last_episode_starts`, and `generator_ready`
+# are initialized by stable-baselines3 parent classes; mypy can't see through
+# those imports, so suppress `has-type` in the files that subclass them.
+[[tool.mypy.overrides]]
+module = [
+    "rma4rma.algo.buffer",
+    "rma4rma.algo.ppo",
+]
+disable_error_code = ["has-type"]

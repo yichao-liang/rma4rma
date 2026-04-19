@@ -1,0 +1,94 @@
+[MASTER]
+
+extension-pkg-whitelist=numpy,torch
+ignore=CVS,venv,.venv,ManiSkill2,stable-baselines3
+ignore-paths=
+ignore-patterns=
+
+jobs=1
+load-plugins=
+persistent=yes
+unsafe-load-any-extension=no
+
+
+[MESSAGES CONTROL]
+
+confidence=
+
+# Disabled checks tuned for a research codebase: lots of short variable names,
+# scientific conventions, and ML libraries whose members pylint can't infer.
+# Heavy imports (torch, stable_baselines3, mani_skill2, sapien) are treated as
+# opaque by pylint since the ML forks aren't always installable in CI.
+disable=
+    access-member-before-definition,
+    arguments-differ,
+    attribute-defined-outside-init,
+    bad-super-call,
+    consider-using-enumerate,
+    consider-using-f-string,
+    consider-using-from-import,
+    consider-using-generator,
+    consider-using-max-builtin,
+    consider-using-with,
+    duplicate-code,
+    f-string-without-interpolation,
+    fixme,
+    import-error,
+    import-outside-toplevel,
+    invalid-name,
+    line-too-long,
+    logging-format-interpolation,
+    logging-fstring-interpolation,
+    missing-class-docstring,
+    missing-function-docstring,
+    missing-module-docstring,
+    no-else-raise,
+    no-else-return,
+    no-member,
+    no-name-in-module,
+    not-callable,
+    possibly-unused-variable,
+    protected-access,
+    raise-missing-from,
+    redefined-builtin,
+    super-with-arguments,
+    too-few-public-methods,
+    too-many-arguments,
+    too-many-branches,
+    too-many-instance-attributes,
+    too-many-locals,
+    too-many-nested-blocks,
+    too-many-positional-arguments,
+    too-many-statements,
+    undefined-loop-variable,
+    unidiomatic-typecheck,
+    unnecessary-lambda-assignment,
+    unspecified-encoding,
+    unsubscriptable-object,
+    unused-argument,
+    unused-import,
+    unused-variable,
+    use-dict-literal,
+    use-list-literal,
+    useless-object-inheritance,
+    useless-option-value,
+    useless-parent-delegation
+
+enable=
+
+
+[REPORTS]
+
+evaluation=10.0 - ((float(5 * error + warning + refactor + convention) / statement) * 10)
+output-format=text
+
+
+[FORMAT]
+
+max-line-length=120
+indent-string='    '
+
+
+[BASIC]
+
+good-names=i,j,k,n,m,t,x,y,z,e,f,h,w,c,pi,vf,lr,kl,nn,th,ln,fc,cr,ax,id,ok,ex,_

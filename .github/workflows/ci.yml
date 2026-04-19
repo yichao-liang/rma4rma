@@ -1,0 +1,75 @@
+name: CI Checks
+
+on: [push, pull_request]
+
+jobs:
+  autoformat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run black
+        uses: psf/black@stable
+        with:
+          options: "--check --verbose"
+          src: "src tests"
+      - name: Run isort
+        uses: isort/isort-action@master
+        with:
+          configuration: "--check-only --diff --profile black src tests"
+
+  static-type-checking:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+      - name: Install the project
+        run: uv pip install --system -e ".[develop]"
+      - name: Mypy
+        run: mypy src/ tests/
+
+  linting:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+      - name: Install the project
+        run: uv pip install --system -e ".[develop]"
+      - name: Pylint
+        run: pylint src/ tests/ --rcfile=.pylintrc
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+      - name: Install the project
+        run: uv pip install --system -e ".[develop]"
+      - name: Pytest
+        run: pytest tests/
