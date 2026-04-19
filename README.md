@@ -41,11 +41,13 @@ See Table 1 of the paper for headline results.
 
 ## Installation
 
-The codebase depends on two customized forks of external projects, included as
-git submodules:
+The codebase depends on two customized forks of external projects, pinned as
+git submodules (see [`.gitmodules`](.gitmodules)):
 
-- [`ManiSkill2`](https://github.com/yichao-liang/ManiSkill2) on branch `rma2`
-- [`stable-baselines3`](https://github.com/yichao-liang/stable-baselines3) on branch `rma2`
+- [`ManiSkill2`](https://github.com/yichao-liang/ManiSkill2) — adds
+  observation-dict variants, depth-camera wrappers, and randomization hooks.
+- [`stable-baselines3`](https://github.com/yichao-liang/stable-baselines3) —
+  exposes the policy / encoder hooks needed for the two-phase training loop.
 
 Clone with submodules:
 
