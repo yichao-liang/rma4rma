@@ -1,17 +1,21 @@
-from collections import OrderedDict
 import random
+from collections import OrderedDict
 
-from transforms3d.quaternions import axangle2quat, qmult
 import numpy as np
-from sapien.core import Pose
-from mani_skill2.utils.registration import register_env
-from mani_skill2.utils.common import flatten_state_dict, random_choice
 from mani_skill2.envs.assembly.peg_insertion_side import PegInsertionSideEnv
-from mani_skill2.utils.sapien_utils import (vectorize_pose,
-                                            get_pairwise_contact_impulse,
-                                            hex2rgba, look_at)
 from mani_skill2.sensors.camera import parse_camera_cfgs
-from algo.misc import get_task_id, get_object_id, linear_schedule
+from mani_skill2.utils.common import flatten_state_dict, random_choice
+from mani_skill2.utils.registration import register_env
+from mani_skill2.utils.sapien_utils import (
+    get_pairwise_contact_impulse,
+    hex2rgba,
+    look_at,
+    vectorize_pose,
+)
+from sapien.core import Pose
+from transforms3d.quaternions import axangle2quat, qmult
+
+from rma4rma.algo.misc import get_object_id, linear_schedule
 
 
 @register_env("PegInsertionSide-v1", max_episode_steps=200)
@@ -46,60 +50,75 @@ class PegInsertionRMA(PegInsertionSideEnv):
 
         if self.auto_dr:
             self.dr_params = OrderedDict(
-                obj_scale=[1., 1.],
-                obj_density=[1., 1.],
-                obj_friction=[1., 1.],
-                force_scale=[0., 0.],
-                obj_position=[0., 0.],
-                obj_rotation=[0., 0.],
-                prop_position=[0., 0.],
+                obj_scale=[1.0, 1.0],
+                obj_density=[1.0, 1.0],
+                obj_friction=[1.0, 1.0],
+                force_scale=[0.0, 0.0],
+                obj_position=[0.0, 0.0],
+                obj_rotation=[0.0, 0.0],
+                prop_position=[0.0, 0.0],
             )
         else:
             init_step, end_step = 0, 2e6  # 15M
             if self.ext_disturbance:
                 self.force_scale_scdl = linear_schedule(
-                    0., self.force_scale_h, init_step, end_step)
+                    0.0, self.force_scale_h, init_step, end_step
+                )
             if self.randomized_env:
-                self.scale_h_scdl = linear_schedule(1., self.scl_scdl_h,
-                                                    init_step, end_step)
-                self.scale_l_scdl = linear_schedule(1., self.scl_scdl_l,
-                                                    init_step, end_step)
-                self.dens_h_scdl = linear_schedule(1., self.dens_scdl_h,
-                                                   init_step, end_step)
-                self.dens_l_scdl = linear_schedule(1., self.dens_scdl_l,
-                                                   init_step, end_step)
-                self.fric_h_scdl = linear_schedule(1., self.fric_scdl_h,
-                                                   init_step, end_step)
-                self.fric_l_scdl = linear_schedule(1., self.fric_scdl_l,
-                                                   init_step, end_step)
+                self.scale_h_scdl = linear_schedule(
+                    1.0, self.scl_scdl_h, init_step, end_step
+                )
+                self.scale_l_scdl = linear_schedule(
+                    1.0, self.scl_scdl_l, init_step, end_step
+                )
+                self.dens_h_scdl = linear_schedule(
+                    1.0, self.dens_scdl_h, init_step, end_step
+                )
+                self.dens_l_scdl = linear_schedule(
+                    1.0, self.dens_scdl_l, init_step, end_step
+                )
+                self.fric_h_scdl = linear_schedule(
+                    1.0, self.fric_scdl_h, init_step, end_step
+                )
+                self.fric_l_scdl = linear_schedule(
+                    1.0, self.fric_scdl_l, init_step, end_step
+                )
 
             if self.obs_noise:
                 # noise in agent joint position and object pose
-                self.proprio_h_scdl = linear_schedule(0, self.prop_scdl_h,
-                                                      init_step, end_step)
-                self.proprio_l_scdl = linear_schedule(0, self.prop_scdl_l,
-                                                      init_step, end_step)
-                self.pos_h_scdl = linear_schedule(0, self.pos_scdl_h,
-                                                  init_step, end_step)
-                self.pos_l_scdl = linear_schedule(0, self.pos_scdl_l,
-                                                  init_step, end_step)
-                self.rot_h_scdl = linear_schedule(0, self.rot_scdl_h,
-                                                  init_step, end_step)
-                self.rot_l_scdl = linear_schedule(0, self.rot_scdl_l,
-                                                  init_step, end_step)
+                self.proprio_h_scdl = linear_schedule(
+                    0, self.prop_scdl_h, init_step, end_step
+                )
+                self.proprio_l_scdl = linear_schedule(
+                    0, self.prop_scdl_l, init_step, end_step
+                )
+                self.pos_h_scdl = linear_schedule(
+                    0, self.pos_scdl_h, init_step, end_step
+                )
+                self.pos_l_scdl = linear_schedule(
+                    0, self.pos_scdl_l, init_step, end_step
+                )
+                self.rot_h_scdl = linear_schedule(
+                    0, self.rot_scdl_h, init_step, end_step
+                )
+                self.rot_l_scdl = linear_schedule(
+                    0, self.rot_scdl_l, init_step, end_step
+                )
 
     def set_step_counter(self, n):
         self.step_counter = n
 
-    def __init__(self,
-                 *args,
-                 auto_dr=False,
-                 randomized_training=False,
-                 obs_noise=False,
-                 ext_disturbance=False,
-                 test_eval=False,
-                 inc_obs_noise_in_priv=False,
-                 **kwargs):
+    def __init__(
+        self,
+        *args,
+        auto_dr=False,
+        randomized_training=False,
+        obs_noise=False,
+        ext_disturbance=False,
+        test_eval=False,
+        inc_obs_noise_in_priv=False,
+        **kwargs,
+    ):
 
         self.step_counter = 0
 
@@ -134,17 +153,19 @@ class PegInsertionRMA(PegInsertionSideEnv):
         obs_dict = self._get_obs_state_dict()
 
         camera_param_dict = {}
-        for k, v in self.get_camera_params()['hand_camera'].items():
+        for k, v in self.get_camera_params()["hand_camera"].items():
             camera_param_dict[k] = v.flatten()
 
-        obs_dict.update({
-            'camera_param': flatten_state_dict(camera_param_dict),
-            'image': self.get_images(),
-        })
+        obs_dict.update(
+            {
+                "camera_param": flatten_state_dict(camera_param_dict),
+                "image": self.get_images(),
+            }
+        )
         return obs_dict
 
     def _configure_cameras(self):
-        '''modified to only include agent camera'''
+        """Modified to only include agent camera."""
         self._camera_cfgs = OrderedDict()
         # self._camera_cfgs.update(parse_camera_cfgs(self._register_cameras()))
 
@@ -159,42 +180,44 @@ class PegInsertionRMA(PegInsertionSideEnv):
         self.set_episode_rng(seed)
         self.seedd = self._episode_seed
         if self.auto_dr:
-            if self.eval_env and self.randomized_param == 'obj_position':
+            if self.eval_env and self.randomized_param == "obj_position":
                 self.pos_noise = self._episode_rng.choice(
-                    self.dr_params['obj_position'])
+                    self.dr_params["obj_position"]
+                )
             else:
                 self.pos_noise = self._episode_rng.uniform(
-                    *self.dr_params['obj_position'], 3)
+                    *self.dr_params["obj_position"], 3
+                )
 
-            if self.eval_env and self.randomized_param == 'obj_rotation':
-                self.rot_ang = self._episode_rng.choice(
-                    self.dr_params['obj_rotation'])
+            if self.eval_env and self.randomized_param == "obj_rotation":
+                self.rot_ang = self._episode_rng.choice(self.dr_params["obj_rotation"])
             else:
                 self.rot_ang = self._episode_rng.uniform(
-                    *self.dr_params['obj_rotation'])
+                    *self.dr_params["obj_rotation"]
+                )
             rot_axis = self._episode_rng.uniform(0, 1, 3)
             self.rot_noise = axangle2quat(rot_axis, self.rot_ang)
 
-            if self.eval_env and self.randomized_param == 'prop_position':
+            if self.eval_env and self.randomized_param == "prop_position":
                 self.proprio_noise = self._episode_rng.choice(
-                    self.dr_params['prop_position'])
+                    self.dr_params["prop_position"]
+                )
             else:
                 self.proprio_noise = self._episode_rng.uniform(
-                    *self.dr_params['prop_position'], 9)
+                    *self.dr_params["prop_position"], 9
+                )
         elif self.obs_noise:
             # noise tok proprioception
             # noise to proprioception
-            self.proprio_h = self.proprio_h_scdl(
-                elapsed_steps=self.step_counter)
-            self.proprio_l = self.proprio_l_scdl(
-                elapsed_steps=self.step_counter)
+            self.proprio_h = self.proprio_h_scdl(elapsed_steps=self.step_counter)
+            self.proprio_l = self.proprio_l_scdl(elapsed_steps=self.step_counter)
             self.proprio_noise = self._episode_rng.uniform(
-                self.proprio_l, self.proprio_h, 9)
+                self.proprio_l, self.proprio_h, 9
+            )
 
             self.pos_h = self.pos_h_scdl(elapsed_steps=self.step_counter)
             self.pos_l = self.pos_l_scdl(elapsed_steps=self.step_counter)
-            self.pos_noise = self._episode_rng.uniform(self.pos_h, self.pos_l,
-                                                       3)
+            self.pos_noise = self._episode_rng.uniform(self.pos_h, self.pos_l, 3)
 
             self.rot_h = self.rot_h_scdl(elapsed_steps=self.step_counter)
             self.rot_l = self.rot_l_scdl(elapsed_steps=self.step_counter)
@@ -204,41 +227,42 @@ class PegInsertionRMA(PegInsertionSideEnv):
         return super().reset(seed, options)
 
     def _load_actors(self):
-        '''modified to randomize scale
-        '''
+        """Modified to randomize scale."""
         # self.set_episode_rng(1)
         self._add_ground(render=self.bg_name is None)
 
         # added to randomize scale
         if self.auto_dr:
-            if self.eval_env and self.randomized_param == 'obj_scale':
+            if self.eval_env and self.randomized_param == "obj_scale":
                 self.model_scale_mult = self._episode_rng.choice(
-                    self.dr_params['obj_scale'])
+                    self.dr_params["obj_scale"]
+                )
             else:
                 self.model_scale_mult = self._episode_rng.uniform(
-                    *self.dr_params['obj_scale'])
+                    *self.dr_params["obj_scale"]
+                )
         elif self.randomized_env:
             self.scale_h = self.scale_h_scdl(elapsed_steps=self.step_counter)
             self.scale_l = self.scale_l_scdl(elapsed_steps=self.step_counter)
             self.model_scale_mult = self._episode_rng.uniform(
-                self.scale_l, self.scale_h)
+                self.scale_l, self.scale_h
+            )
         else:
             self.model_scale_mult = 1.0
 
         # added to randomize density
         density = 1000
         if self.auto_dr:
-            if self.eval_env and self.randomized_param == 'obj_density':
-                self.dens_mult = self._episode_rng.choice(
-                    self.dr_params['obj_density'])
+            if self.eval_env and self.randomized_param == "obj_density":
+                self.dens_mult = self._episode_rng.choice(self.dr_params["obj_density"])
             else:
                 self.dens_mult = self._episode_rng.uniform(
-                    *self.dr_params['obj_density'])
+                    *self.dr_params["obj_density"]
+                )
         elif self.randomized_env:
             self.dens_h = self.dens_h_scdl(elapsed_steps=self.step_counter)
             self.dens_l = self.dens_l_scdl(elapsed_steps=self.step_counter)
-            self.dens_mult = self._episode_rng.uniform(self.dens_l,
-                                                       self.dens_h)
+            self.dens_mult = self._episode_rng.uniform(self.dens_l, self.dens_h)
         else:
             self.dens_mult = np.array(1)
         density *= self.dens_mult
@@ -247,13 +271,10 @@ class PegInsertionRMA(PegInsertionSideEnv):
 
         # peg
         # length, radius = 0.1, 0.02
-        length = self._episode_rng.uniform(0.075,
-                                           0.125) * self.model_scale_mult
-        radius = self._episode_rng.uniform(0.015,
-                                           0.025) * self.model_scale_mult
+        length = self._episode_rng.uniform(0.075, 0.125) * self.model_scale_mult
+        radius = self._episode_rng.uniform(0.015, 0.025) * self.model_scale_mult
         builder = self._scene.create_actor_builder()
-        builder.add_box_collision(half_size=[length, radius, radius],
-                                  density=density)
+        builder.add_box_collision(half_size=[length, radius, radius], density=density)
 
         # peg head
         mat = self._renderer.create_material()
@@ -285,36 +306,36 @@ class PegInsertionRMA(PegInsertionSideEnv):
 
         # added to randomize friction
         if self.auto_dr:
-            if self.eval_env and self.randomized_param == 'obj_friction':
+            if self.eval_env and self.randomized_param == "obj_friction":
                 self.obj_friction = self._episode_rng.choice(
-                    self.dr_params['obj_friction'])
+                    self.dr_params["obj_friction"]
+                )
             else:
                 self.obj_friction = self._episode_rng.uniform(
-                    *self.dr_params['obj_friction'])
+                    *self.dr_params["obj_friction"]
+                )
         elif self.randomized_env:
             self.fric_h = self.fric_h_scdl(elapsed_steps=self.step_counter)
             self.fric_l = self.fric_l_scdl(elapsed_steps=self.step_counter)
-            self.obj_friction = self._episode_rng.uniform(
-                self.fric_l, self.fric_h)
+            self.obj_friction = self._episode_rng.uniform(self.fric_l, self.fric_h)
         else:
-            self.obj_friction = np.array(1.)
+            self.obj_friction = np.array(1.0)
         phys_mtl = self._scene.create_physical_material(
             static_friction=self.obj_friction,
             dynamic_friction=self.obj_friction,
-            restitution=0.1)
+            restitution=0.1,
+        )
         # physical material only have friction related properties
         # https://github.com/haosulab/SAPIEN/blob/ab1d9a9fa1428484a918e61185ae9df2beb7cb30/python/py_package/core/pysapien/__init__.pyi#L1088
         for cs in self.peg.get_collision_shapes():
             cs.set_physical_material(phys_mtl)
 
         # box with hole
-        center = 0.5 * (length - radius) * self._episode_rng.uniform(
-            -1, 1, size=2)
+        center = 0.5 * (length - radius) * self._episode_rng.uniform(-1, 1, size=2)
         inner_radius, outer_radius, depth = radius + self._clearance, length, length
-        self.box = self._build_box_with_hole(inner_radius,
-                                             outer_radius,
-                                             depth,
-                                             center=center)
+        self.box = self._build_box_with_hole(
+            inner_radius, outer_radius, depth, center=center
+        )
         self.box_hole_offset = Pose(np.hstack([0, center]))
         self.box_hole_radius = inner_radius
 
@@ -333,14 +354,14 @@ class PegInsertionRMA(PegInsertionSideEnv):
                 self.disturb_force /= np.linalg.norm(self.disturb_force, ord=2)
                 # sample force scale
                 if self.auto_dr:
-                    if self.eval_env and self.randomized_param == 'force_scale':
-                        self.force_scale = self.dr_params['force_scale'][1]
+                    if self.eval_env and self.randomized_param == "force_scale":
+                        self.force_scale = self.dr_params["force_scale"][1]
                     else:
                         self.force_scale = self._episode_rng.uniform(
-                            *self.dr_params['force_scale'])
+                            *self.dr_params["force_scale"]
+                        )
                 else:
-                    self.fs_h = self.force_scale_scdl(
-                        elapsed_steps=self.step_counter)
+                    self.fs_h = self.force_scale_scdl(elapsed_steps=self.step_counter)
                     self.force_scale = self._episode_rng.uniform(0, self.fs_h)
                 if self.force_scale > self.max_force:
                     self.max_force = self.force_scale
@@ -350,16 +371,17 @@ class PegInsertionRMA(PegInsertionSideEnv):
             # only apply if the object is grasped
             # if self.agent.check_grasp(self.peg):
             if grasped:
-                self.peg.add_force_at_point(self.disturb_force,
-                                            self.peg.pose.p)
+                self.peg.add_force_at_point(self.disturb_force, self.peg.pose.p)
 
         contacts = self._scene.get_contacts()
-        limpulse = np.linalg.norm(get_pairwise_contact_impulse(
-            contacts, self.agent.finger1_link, self.peg),
-                                  ord=2)
-        rimpulse = np.linalg.norm(get_pairwise_contact_impulse(
-            contacts, self.agent.finger2_link, self.peg),
-                                  ord=2)
+        limpulse = np.linalg.norm(
+            get_pairwise_contact_impulse(contacts, self.agent.finger1_link, self.peg),
+            ord=2,
+        )
+        rimpulse = np.linalg.norm(
+            get_pairwise_contact_impulse(contacts, self.agent.finger2_link, self.peg),
+            ord=2,
+        )
 
         if self.obs_noise:
             # noise to proprioception
@@ -384,7 +406,8 @@ class PegInsertionRMA(PegInsertionSideEnv):
             obj_density=self.obj_density,
             obj_friction=self.obj_friction,
             limpulse=limpulse,
-            rimpulse=rimpulse)
+            rimpulse=rimpulse,
+        )
 
         if self.inc_obs_noise_in_priv:
             if grasped:
@@ -392,25 +415,28 @@ class PegInsertionRMA(PegInsertionSideEnv):
             else:
                 f = np.zeros_like(self.disturb_force)
             # 9 + 7 + 3
-            priv_info_dict.update(proprio_noise=proprio_noise,
-                                  pos_noise=pos_noise,
-                                  rot_noise=rot_noise,
-                                  disturb_force=f)
+            priv_info_dict.update(
+                proprio_noise=self.proprio_noise,
+                pos_noise=self.pos_noise,
+                rot_noise=self.rot_noise,
+                disturb_force=f,
+            )
 
         return OrderedDict(
-            # task_id=get_task_id("PickSingleYCB"),
             agent_state=flatten_state_dict(
                 OrderedDict(
                     proprioception=proprio,
                     base_pose=vectorize_pose(self.agent.robot.pose),
                     tcp_pose=vectorize_pose(self.tcp.pose),
-                )),
+                )
+            ),
             # object 1
             object1_state=flatten_state_dict(
                 OrderedDict(
                     obj_pos=obj_pos,
                     tcp_to_obj_pos=obj_pos - self.tcp.pose.p,
-                )),
+                )
+            ),
             object1_type_id=self.obj1_type_id,
             object1_id=self.obj1_id,
             obj1_priv_info=flatten_state_dict(priv_info_dict),
@@ -421,5 +447,6 @@ class PegInsertionRMA(PegInsertionSideEnv):
                     tcp_to_goal_pos=self.box_hole_pose.p - self.tcp.pose.p,
                     obj_to_goal_pos=self.box_hole_pose.p - self.peg.pose.p,
                     box_hole_radius=self.box_hole_radius,
-                )).astype("float32"),
+                )
+            ).astype("float32"),
         )

@@ -1,25 +1,26 @@
-from collections import OrderedDict
-import random
-from pathlib import Path
 import os
+import random
+from collections import OrderedDict
+from pathlib import Path
 
-from transforms3d.quaternions import axangle2quat, qmult
 import numpy as np
 from mani_skill2 import format_path
-from numpy.linalg import norm
-from mani_skill2.utils.registration import register_env
-from mani_skill2.utils.common import flatten_state_dict, random_choice
 from mani_skill2.envs.misc.turn_faucet import TurnFaucetEnv
-# from mani_skill2.utils.sapien_utils import (vectorize_pose,
-#                                             get_pairwise_contact_impulse)
-from mani_skill2.utils.sapien_utils import (get_entity_by_name, hex2rgba,
-                                            look_at,
-                                            set_articulation_render_material,
-                                            vectorize_pose,
-                                            get_pairwise_contact_impulse)
 from mani_skill2.sensors.camera import parse_camera_cfgs
+from mani_skill2.utils.common import flatten_state_dict, random_choice
+from mani_skill2.utils.registration import register_env
+from mani_skill2.utils.sapien_utils import (
+    get_entity_by_name,
+    get_pairwise_contact_impulse,
+    hex2rgba,
+    look_at,
+    set_articulation_render_material,
+    vectorize_pose,
+)
+from numpy.linalg import norm
+from transforms3d.quaternions import axangle2quat, qmult
 
-from algo.misc import get_task_id, get_object_id, linear_schedule
+from rma4rma.algo.misc import get_object_id, linear_schedule
 
 
 @register_env("TurnFaucet-v1", max_episode_steps=200)
@@ -54,60 +55,75 @@ class TurnFaucetRMA(TurnFaucetEnv):
 
         if self.auto_dr:
             self.dr_params = OrderedDict(
-                obj_scale=[1., 1.],
-                obj_density=[1., 1.],
-                obj_friction=[1., 1.],
-                force_scale=[0., 0.],
-                obj_position=[0., 0.],
-                obj_rotation=[0., 0.],
-                prop_position=[0., 0.],
+                obj_scale=[1.0, 1.0],
+                obj_density=[1.0, 1.0],
+                obj_friction=[1.0, 1.0],
+                force_scale=[0.0, 0.0],
+                obj_position=[0.0, 0.0],
+                obj_rotation=[0.0, 0.0],
+                prop_position=[0.0, 0.0],
             )
         else:
             init_step, end_step = 1e6, 2e6  # 15M
             if self.ext_disturbance:
                 self.force_scale_scdl = linear_schedule(
-                    0., self.force_scale_h, init_step, end_step)
+                    0.0, self.force_scale_h, init_step, end_step
+                )
             if self.randomized_env:
-                self.scale_h_scdl = linear_schedule(1., self.scl_scdl_h,
-                                                    init_step, end_step)
-                self.scale_l_scdl = linear_schedule(1., self.scl_scdl_l,
-                                                    init_step, end_step)
-                self.dens_h_scdl = linear_schedule(1., self.dens_scdl_h,
-                                                   init_step, end_step)
-                self.dens_l_scdl = linear_schedule(1., self.dens_scdl_l,
-                                                   init_step, end_step)
-                self.fric_h_scdl = linear_schedule(1., self.fric_scdl_h,
-                                                   init_step, end_step)
-                self.fric_l_scdl = linear_schedule(1., self.fric_scdl_l,
-                                                   init_step, end_step)
+                self.scale_h_scdl = linear_schedule(
+                    1.0, self.scl_scdl_h, init_step, end_step
+                )
+                self.scale_l_scdl = linear_schedule(
+                    1.0, self.scl_scdl_l, init_step, end_step
+                )
+                self.dens_h_scdl = linear_schedule(
+                    1.0, self.dens_scdl_h, init_step, end_step
+                )
+                self.dens_l_scdl = linear_schedule(
+                    1.0, self.dens_scdl_l, init_step, end_step
+                )
+                self.fric_h_scdl = linear_schedule(
+                    1.0, self.fric_scdl_h, init_step, end_step
+                )
+                self.fric_l_scdl = linear_schedule(
+                    1.0, self.fric_scdl_l, init_step, end_step
+                )
 
             if self.obs_noise:
                 # noise in agent joint position and object pose
-                self.proprio_h_scdl = linear_schedule(0, self.prop_scdl_h,
-                                                      init_step, end_step)
-                self.proprio_l_scdl = linear_schedule(0, self.prop_scdl_l,
-                                                      init_step, end_step)
-                self.pos_h_scdl = linear_schedule(0, self.pos_scdl_h,
-                                                  init_step, end_step)
-                self.pos_l_scdl = linear_schedule(0, self.pos_scdl_l,
-                                                  init_step, end_step)
-                self.rot_h_scdl = linear_schedule(0, self.rot_scdl_h,
-                                                  init_step, end_step)
-                self.rot_l_scdl = linear_schedule(0, self.rot_scdl_l,
-                                                  init_step, end_step)
+                self.proprio_h_scdl = linear_schedule(
+                    0, self.prop_scdl_h, init_step, end_step
+                )
+                self.proprio_l_scdl = linear_schedule(
+                    0, self.prop_scdl_l, init_step, end_step
+                )
+                self.pos_h_scdl = linear_schedule(
+                    0, self.pos_scdl_h, init_step, end_step
+                )
+                self.pos_l_scdl = linear_schedule(
+                    0, self.pos_scdl_l, init_step, end_step
+                )
+                self.rot_h_scdl = linear_schedule(
+                    0, self.rot_scdl_h, init_step, end_step
+                )
+                self.rot_l_scdl = linear_schedule(
+                    0, self.rot_scdl_l, init_step, end_step
+                )
 
     def set_step_counter(self, n):
         self.step_counter = n
 
-    def __init__(self,
-                 *args,
-                 auto_dr=False,
-                 randomized_training=False,
-                 obs_noise=False,
-                 ext_disturbance=False,
-                 test_eval=False,
-                 inc_obs_noise_in_priv=False,
-                 **kwargs):
+    def __init__(
+        self,
+        *args,
+        auto_dr=False,
+        randomized_training=False,
+        obs_noise=False,
+        ext_disturbance=False,
+        test_eval=False,
+        inc_obs_noise_in_priv=False,
+        **kwargs,
+    ):
         self.step_counter = 0
 
         self.test_eval = test_eval
@@ -124,7 +140,8 @@ class TurnFaucetRMA(TurnFaucetEnv):
         # get object list for computing ids
         parent_folder = "data/partnet_mobility/dataset"
         self.object_list = [
-            f for f in os.listdir(parent_folder)
+            f
+            for f in os.listdir(parent_folder)
             if os.path.isdir(os.path.join(parent_folder, f))
         ]
         super().__init__(*args, **kwargs)
@@ -132,40 +149,42 @@ class TurnFaucetRMA(TurnFaucetEnv):
     def reset(self, seed=None, options=None):
         self.set_episode_rng(seed)
         if self.auto_dr:
-            if self.eval_env and self.randomized_param == 'obj_position':
+            if self.eval_env and self.randomized_param == "obj_position":
                 self.pos_noise = self._episode_rng.choice(
-                    self.dr_params['obj_position'])
+                    self.dr_params["obj_position"]
+                )
             else:
-                self.pos_noise = nself._episode_rng.uniform(
-                    *self.dr_params['obj_position'], 3)
+                self.pos_noise = self._episode_rng.uniform(
+                    *self.dr_params["obj_position"], 3
+                )
 
-            if self.eval_env and self.randomized_param == 'obj_rotation':
-                self.rot_ang = self._episode_rng.choice(
-                    self.dr_params['obj_rotation'])
+            if self.eval_env and self.randomized_param == "obj_rotation":
+                self.rot_ang = self._episode_rng.choice(self.dr_params["obj_rotation"])
             else:
                 self.rot_ang = self._episode_rng.uniform(
-                    *self.dr_params['obj_rotation'])
+                    *self.dr_params["obj_rotation"]
+                )
             rot_axis = self._episode_rng.uniform(0, 1, 3)
             self.rot_noise = axangle2quat(rot_axis, self.rot_ang)
 
-            if self.eval_env and self.randomized_param == 'prop_position':
+            if self.eval_env and self.randomized_param == "prop_position":
                 self.proprio_noise = self._episode_rng.choice(
-                    self.dr_params['prop_position'])
+                    self.dr_params["prop_position"]
+                )
             else:
                 self.proprio_noise = self._episode_rng.uniform(
-                    *self.dr_params['prop_position'], 9)
+                    *self.dr_params["prop_position"], 9
+                )
         elif self.obs_noise:
             # noise to proprioception
-            self.proprio_h = self.proprio_h_scdl(
-                elapsed_steps=self.step_counter)
-            self.proprio_l = self.proprio_l_scdl(
-                elapsed_steps=self.step_counter)
+            self.proprio_h = self.proprio_h_scdl(elapsed_steps=self.step_counter)
+            self.proprio_l = self.proprio_l_scdl(elapsed_steps=self.step_counter)
             self.proprio_noise = self._episode_rng.uniform(
-                self.proprio_l, self.proprio_h, 9)
+                self.proprio_l, self.proprio_h, 9
+            )
             self.pos_h = self.pos_h_scdl(elapsed_steps=self.step_counter)
             self.pos_l = self.pos_l_scdl(elapsed_steps=self.step_counter)
-            self.pos_noise = self._episode_rng.uniform(self.pos_h, self.pos_l,
-                                                       3)
+            self.pos_noise = self._episode_rng.uniform(self.pos_h, self.pos_l, 3)
             self.rot_h = self.rot_h_scdl(elapsed_steps=self.step_counter)
             self.rot_l = self.rot_l_scdl(elapsed_steps=self.step_counter)
             rot_axis = self._episode_rng.uniform(0, 1, 3)
@@ -175,8 +194,10 @@ class TurnFaucetRMA(TurnFaucetEnv):
         return super().reset(seed, options)
 
     def _set_model(self, model_id, model_scale):
-        """rewrite to save object id and type id
-        Set the model id and scale. If not provided, choose one randomly."""
+        """Rewrite to save object id and type id Set the model id and scale.
+
+        If not provided, choose one randomly.
+        """
         reconfigure = False
 
         # Model ID
@@ -187,11 +208,12 @@ class TurnFaucetRMA(TurnFaucetEnv):
         self.model_id = model_id
         self.model_info = self.model_db[self.model_id]
 
-        self.obj1_num_id = get_object_id(task_name="TurnFaucet",
-                                         model_id=self.model_id,
-                                         object_list=self.object_list)
-        self.obj1_type_num_id = get_object_id(task_name="TurnFaucet",
-                                              model_id=self.model_id)
+        self.obj1_num_id = get_object_id(
+            task_name="TurnFaucet", model_id=self.model_id, object_list=self.object_list
+        )
+        self.obj1_type_num_id = get_object_id(
+            task_name="TurnFaucet", model_id=self.model_id
+        )
 
         # Scale
         if model_scale is None:
@@ -206,17 +228,20 @@ class TurnFaucetRMA(TurnFaucetEnv):
 
         # added to set scale
         if self.auto_dr:
-            if self.eval_env and self.randomized_param == 'obj_scale':
+            if self.eval_env and self.randomized_param == "obj_scale":
                 self.model_scale_mult = self._episode_rng.choice(
-                    self.dr_params['obj_scale'])
+                    self.dr_params["obj_scale"]
+                )
             else:
                 self.model_scale_mult = self._episode_rng.uniform(
-                    *self.dr_params['obj_scale'])
+                    *self.dr_params["obj_scale"]
+                )
         elif self.randomized_env:
             self.scale_h = self.scale_h_scdl(elapsed_steps=self.step_counter)
             self.scale_l = self.scale_l_scdl(elapsed_steps=self.step_counter)
             self.model_scale_mult = self._episode_rng.uniform(
-                self.scale_l, self.scale_h)
+                self.scale_l, self.scale_h
+            )
         else:
             self.model_scale_mult = 1.0
         self.model_scale *= self.model_scale_mult
@@ -243,17 +268,16 @@ class TurnFaucetRMA(TurnFaucetEnv):
 
         # randomize density
         if self.auto_dr:
-            if self.eval_env and self.randomized_param == 'obj_density':
-                self.dens_mult = self._episode_rng.choice(
-                    self.dr_params['obj_density'])
+            if self.eval_env and self.randomized_param == "obj_density":
+                self.dens_mult = self._episode_rng.choice(self.dr_params["obj_density"])
             else:
                 self.dens_mult = self._episode_rng.uniform(
-                    *self.dr_params['obj_density'])
+                    *self.dr_params["obj_density"]
+                )
         elif self.randomized_env:
             self.dens_h = self.dens_h_scdl(elapsed_steps=self.step_counter)
             self.dens_l = self.dens_l_scdl(elapsed_steps=self.step_counter)
-            self.dens_mult = self._episode_rng.uniform(self.dens_l,
-                                                       self.dens_h)
+            self.dens_mult = self._episode_rng.uniform(self.dens_l, self.dens_h)
         else:
             self.dens_mult = np.array(1)
         density *= self.dens_mult
@@ -263,36 +287,36 @@ class TurnFaucetRMA(TurnFaucetEnv):
         articulation = loader.load(str(urdf_path), config={"density": density})
         articulation.set_name("faucet")
 
-        set_articulation_render_material(articulation,
-                                         color=hex2rgba("#AAAAAA"),
-                                         metallic=1,
-                                         roughness=0.4)
+        set_articulation_render_material(
+            articulation, color=hex2rgba("#AAAAAA"), metallic=1, roughness=0.4
+        )
 
         return articulation
 
     def _initialize_actors(self):
-        '''add randomization in friction
-        '''
+        """Add randomization in friction."""
         super()._initialize_actors()
         # --- randomize friction ---
         if self.auto_dr:
-            if self.eval_env and self.randomized_param == 'obj_friction':
+            if self.eval_env and self.randomized_param == "obj_friction":
                 self.obj_friction = self._episode_rng.choice(
-                    self.dr_params['obj_friction'])
+                    self.dr_params["obj_friction"]
+                )
             else:
                 self.obj_friction = self._episode_rng.uniform(
-                    *self.dr_params['obj_friction'])
+                    *self.dr_params["obj_friction"]
+                )
         elif self.randomized_env:
             self.fric_h = self.fric_h_scdl(elapsed_steps=self.step_counter)
             self.fric_l = self.fric_l_scdl(elapsed_steps=self.step_counter)
-            self.obj_friction = self._episode_rng.uniform(
-                self.fric_l, self.fric_h)
+            self.obj_friction = self._episode_rng.uniform(self.fric_l, self.fric_h)
         else:
-            self.obj_friction = np.array(1.)
+            self.obj_friction = np.array(1.0)
         phys_mtl = self._scene.create_physical_material(
             static_friction=self.obj_friction,
             dynamic_friction=self.obj_friction,
-            restitution=0.1)
+            restitution=0.1,
+        )
         # physical material only have friction related properties
         # https://github.com/haosulab/SAPIEN/blob/ab1d9a9fa1428484a918e61185ae9df2beb7cb30/python/py_package/core/pysapien/__init__.pyi#L1088
         for l in self.switch_links:
@@ -315,24 +339,25 @@ class TurnFaucetRMA(TurnFaucetEnv):
         obs_dict = self._get_obs_state_dict()
 
         camera_param_dict = {}
-        for k, v in self.get_camera_params()['hand_camera'].items():
+        for k, v in self.get_camera_params()["hand_camera"].items():
             camera_param_dict[k] = v.flatten()
 
-        obs_dict.update({
-            'camera_param': flatten_state_dict(camera_param_dict),
-            'image': self.get_images(),
-        })
+        obs_dict.update(
+            {
+                "camera_param": flatten_state_dict(camera_param_dict),
+                "image": self.get_images(),
+            }
+        )
         return obs_dict
 
     def _configure_cameras(self):
-        '''modified to only include agent camera'''
+        """Modified to only include agent camera."""
         self._camera_cfgs = OrderedDict()
         # self._camera_cfgs.update(parse_camera_cfgs(self._register_cameras()))
 
         self._agent_camera_cfgs = OrderedDict()
         if self._agent_cfg is not None:
-            self._agent_camera_cfgs = parse_camera_cfgs(
-                self._agent_cfg.cameras)
+            self._agent_camera_cfgs = parse_camera_cfgs(self._agent_cfg.cameras)
             self._camera_cfgs.update(self._agent_camera_cfgs)
 
     def _get_obs_state_dict(self):
@@ -353,14 +378,14 @@ class TurnFaucetRMA(TurnFaucetEnv):
                 self.disturb_force /= np.linalg.norm(self.disturb_force, ord=2)
                 # sample force scale
                 if self.auto_dr:
-                    if self.eval_env and self.randomized_param == 'force_scale':
-                        self.force_scale = self.dr_params['force_scale'][1]
+                    if self.eval_env and self.randomized_param == "force_scale":
+                        self.force_scale = self.dr_params["force_scale"][1]
                     else:
                         self.force_scale = self._episode_rng.uniform(
-                            *self.dr_params['force_scale'])
+                            *self.dr_params["force_scale"]
+                        )
                 else:
-                    self.fs_h = self.force_scale_scdl(
-                        elapsed_steps=self.step_counter)
+                    self.fs_h = self.force_scale_scdl(elapsed_steps=self.step_counter)
                     self.force_scale = self._episode_rng.uniform(0, self.fs_h)
                 if self.force_scale > self.max_force:
                     self.max_force = self.force_scale
@@ -369,16 +394,21 @@ class TurnFaucetRMA(TurnFaucetEnv):
                 # apply the force to object
             # only apply if the object is grasped
             if grasped:
-                self.target_link.add_force_at_point(self.disturb_force,
-                                                    cmass_pose.p)
+                self.target_link.add_force_at_point(self.disturb_force, cmass_pose.p)
 
         contacts = self._scene.get_contacts()
-        limpulse = np.linalg.norm(get_pairwise_contact_impulse(
-            contacts, self.agent.finger1_link, self.target_link),
-                                  ord=2)
-        rimpulse = np.linalg.norm(get_pairwise_contact_impulse(
-            contacts, self.agent.finger2_link, self.target_link),
-                                  ord=2)
+        limpulse = np.linalg.norm(
+            get_pairwise_contact_impulse(
+                contacts, self.agent.finger1_link, self.target_link
+            ),
+            ord=2,
+        )
+        rimpulse = np.linalg.norm(
+            get_pairwise_contact_impulse(
+                contacts, self.agent.finger2_link, self.target_link
+            ),
+            ord=2,
+        )
 
         if self.obs_noise:
             # noise to proprioception
@@ -404,7 +434,8 @@ class TurnFaucetRMA(TurnFaucetEnv):
             obj_density=self.obj_density,  # 1dim
             obj_friction=self.obj_friction,  # 1dim
             limpulse=limpulse,  # 1dim
-            rimpulse=rimpulse)  # 1dim
+            rimpulse=rimpulse,
+        )  # 1dim
 
         if self.inc_obs_noise_in_priv:
             if grasped:
@@ -412,10 +443,12 @@ class TurnFaucetRMA(TurnFaucetEnv):
             else:
                 f = np.zeros_like(self.disturb_force)
             # 9 + 7 + 3
-            priv_info_dict.update(proprio_noise=proprio_noise,
-                                  pos_noise=pos_noise,
-                                  rot_noise=rot_noise,
-                                  disturb_force=f)
+            priv_info_dict.update(
+                proprio_noise=self.proprio_noise,
+                pos_noise=self.pos_noise,
+                rot_noise=self.rot_noise,
+                disturb_force=f,
+            )
 
         return OrderedDict(
             # the same as the others
@@ -424,7 +457,8 @@ class TurnFaucetRMA(TurnFaucetEnv):
                     proprioception=proprio,
                     base_pose=vectorize_pose(self.agent.robot.pose),
                     tcp_pose=vectorize_pose(self.tcp.pose),
-                )),
+                )
+            ),
             # object 1
             # 1, 7, 3 -> 14 (1, 7, 3, 3)
             object1_state=flatten_state_dict(
@@ -432,7 +466,8 @@ class TurnFaucetRMA(TurnFaucetEnv):
                     # bbox_size=np.array([0]),
                     obj_pos=obj_pos,
                     tcp_to_obj_pos=obj_pos - self.tcp.pose.p,
-                )),
+                )
+            ),
             object1_type_id=self.obj1_type_num_id,
             object1_id=self.obj1_num_id,
             obj1_priv_info=flatten_state_dict(priv_info_dict),
@@ -444,5 +479,6 @@ class TurnFaucetRMA(TurnFaucetEnv):
                     # tcp_to_goal_pos=self.box_hole_pose.p - self.tcp.pose.p,
                     # obj_to_goal_pos=self.box_hole_pose.p - self.peg.pose.p,
                     # box_hole_radius=self.box_hole_radius,
-                )).astype("float32"),
+                )
+            ).astype("float32"),
         )

@@ -1,59 +1,56 @@
 import os
-from stable_baselines3.common.callbacks import EvalCallback, CheckpointCallback
-import warnings
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-import gymnasium as gym
 import numpy as np
+from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
+from stable_baselines3.common.vec_env import sync_envs_normalization
 
-from stable_baselines3.common import type_aliases
-from stable_baselines3.common.vec_env import (DummyVecEnv, VecEnv, VecMonitor,
-                                              is_vecenv_wrapped,
-                                              sync_envs_normalization)
-from algo.evaluate_policy import evaluate_policy
+from rma4rma.algo.evaluate_policy import evaluate_policy
 
 
 class CheckpointCallbackRMA(CheckpointCallback):
 
-    def _latest_ckpt_path(self,
-                          checkpoint_type: str = "",
-                          extension: str = "") -> str:
-        """
-        Helper to get checkpoint path for each type of checkpoint.
+    def _latest_ckpt_path(self, checkpoint_type: str = "", extension: str = "") -> str:
+        """Helper to get checkpoint path for each type of checkpoint.
 
-        :param checkpoint_type: empty for the model, "replay_buffer_"
-            or "vecnormalize_" for the other checkpoints.
+        :param checkpoint_type: empty for the model, "replay_buffer_" or "vecnormalize_"
+            for the other checkpoints.
         :param extension: Checkpoint file extension (zip for model, pkl for others)
         :return: Path to the checkpoint
         """
         return os.path.join(
-            self.save_path,
-            f"{self.name_prefix}_{checkpoint_type}latest.{extension}")
+            self.save_path, f"{self.name_prefix}_{checkpoint_type}latest.{extension}"
+        )
 
     def _on_step(self) -> bool:
         if self.n_calls % (self.save_freq // 10) == 0:
             model_path = self._latest_ckpt_path(extension="zip")
             self.model.save(model_path)
-            # if self.verbose >= 2:
-            print(f"Saving latest model checkpoint to {model_path}")
+            if self.verbose >= 1:
+                print(f"Saving latest model checkpoint to {model_path}")
 
-            if self.save_replay_buffer and hasattr(
-                    self.model,
-                    "replay_buffer") and self.model.replay_buffer is not None:
+            if (
+                self.save_replay_buffer
+                and hasattr(self.model, "replay_buffer")
+                and self.model.replay_buffer is not None
+            ):
                 # If model has a replay buffer, save it too
-                replay_buffer_path = self._latest_ckpt_path("replay_buffer_",
-                                                            extension="pkl")
+                replay_buffer_path = self._latest_ckpt_path(
+                    "replay_buffer_", extension="pkl"
+                )
                 self.model.save_replay_buffer(replay_buffer_path)
                 if self.verbose > 1:
                     print(
                         f"Saving model replay buffer checkpoint to {replay_buffer_path}"
                     )
 
-            if self.save_vecnormalize and self.model.get_vec_normalize_env(
-            ) is not None:
+            if (
+                self.save_vecnormalize
+                and self.model.get_vec_normalize_env() is not None
+            ):
                 # Save the VecNormalize statistics
-                vec_normalize_path = self._latest_ckpt_path("vecnormalize_",
-                                                            extension="pkl")
+                vec_normalize_path = self._latest_ckpt_path(
+                    "vecnormalize_", extension="pkl"
+                )
                 self.model.get_vec_normalize_env().save(vec_normalize_path)
                 if self.verbose >= 2:
                     print(f"Saving model VecNormalize to {vec_normalize_path}")
@@ -65,7 +62,7 @@ class EvalCallbackRMA(EvalCallback):
 
     def __init__(self, *args, **kwargs):
         self.best_success_rate = -np.inf
-        self.num_envs = kwargs.pop('num_envs')
+        self.num_envs = kwargs.pop("num_envs")
         super().__init__(*args, **kwargs)
 
     def _on_step(self) -> bool:
@@ -80,15 +77,17 @@ class EvalCallbackRMA(EvalCallback):
                     raise AssertionError(
                         "Training and eval env are not wrapped the same way, "
                         "see https://stable-baselines3.readthedocs.io/en/master/guide/callbacks.html#evalcallback "
-                        "and warning above.") from e
+                        "and warning above."
+                    ) from e
 
             # Reset success rate buffer
-            self._is_success_buffer = []
+            self._is_success_buffer: list = []
             success_rate = 0.0
 
             # update eval_env's step counter
-            self.eval_env.env_method('set_step_counter',
-                                     self.model.num_timesteps // self.num_envs)
+            self.eval_env.env_method(
+                "set_step_counter", self.model.num_timesteps // self.num_envs
+            )
             episode_rewards, episode_lengths = evaluate_policy(
                 self.model,
                 self.eval_env,
@@ -119,18 +118,18 @@ class EvalCallbackRMA(EvalCallback):
                     **kwargs,
                 )
 
-            mean_reward, std_reward = np.mean(episode_rewards), np.std(
-                episode_rewards)
+            mean_reward, std_reward = np.mean(episode_rewards), np.std(episode_rewards)
             mean_ep_length, std_ep_length = np.mean(episode_lengths), np.std(
-                episode_lengths)
+                episode_lengths
+            )
             self.last_mean_reward = mean_reward
 
             if self.verbose >= 1:
-                print(f"Eval num_timesteps={self.num_timesteps}, "
-                      f"episode_reward={mean_reward:.2f} +/- {std_reward:.2f}")
                 print(
-                    f"Episode length: {mean_ep_length:.2f} +/- {std_ep_length:.2f}"
+                    f"Eval num_timesteps={self.num_timesteps}, "
+                    f"episode_reward={mean_reward:.2f} +/- {std_reward:.2f}"
                 )
+                print(f"Episode length: {mean_ep_length:.2f} +/- {std_ep_length:.2f}")
             # Add to current Logger
             self.logger.record("eval/mean_reward", float(mean_reward))
             self.logger.record("eval/mean_ep_length", mean_ep_length)
@@ -142,19 +141,18 @@ class EvalCallbackRMA(EvalCallback):
                 self.logger.record("eval/success_rate", success_rate)
 
             # Dump log so the evaluation results are printed with the correct timestep
-            self.logger.record("time/total_timesteps",
-                               self.num_timesteps,
-                               exclude="tensorboard")
+            self.logger.record(
+                "time/total_timesteps", self.num_timesteps, exclude="tensorboard"
+            )
             self.logger.dump(self.num_timesteps)
 
-            # if mean_reward > self.best_mean_reward:
             if success_rate >= self.best_success_rate:
                 if self.verbose >= 1:
-                    print("New best mean reward!")
+                    print("New best success rate!")
                 if self.best_model_save_path is not None:
                     self.model.save(
-                        os.path.join(self.best_model_save_path, "best_model"))
-                # self.best_mean_reward = mean_reward
+                        os.path.join(self.best_model_save_path, "best_model")
+                    )
                 self.best_success_rate = success_rate
                 # Trigger callback on new best model, if needed
                 if self.callback_on_new_best is not None:

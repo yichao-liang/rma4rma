@@ -1,7 +1,8 @@
+from typing import Optional
+
 import numpy as np
 import torch as th
 import torch.nn as nn
-import torch.nn.functional as F
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
 
@@ -13,29 +14,38 @@ class Flatten(nn.Module):
 
 class FeaturesExtractorRMA(BaseFeaturesExtractor):
 
-    def __init__(self,
-                 observation_space,
-                 env_name,
-                 object_emb_dim=32,
-                 use_depth_base: bool = False,
-                 use_prop_history_base: bool = False,
-                 only_dr=False,
-                 sys_iden=False,
-                 without_adapt_module=False,
-                 inc_obs_noise_in_priv=False) -> None:
+    def __init__(
+        self,
+        observation_space,
+        env_name,
+        object_emb_dim=32,
+        use_depth_base: bool = False,
+        use_prop_history_base: bool = False,
+        only_dr=False,
+        sys_iden=False,
+        without_adapt_module=False,
+        inc_obs_noise_in_priv=False,
+    ) -> None:
 
         # priv_info aka env_info
-        self.use_priv_info = (not only_dr) and (not without_adapt_module)\
-                        and (not use_depth_base) and (not use_prop_history_base)
+        self.use_priv_info = (
+            (not only_dr)
+            and (not without_adapt_module)
+            and (not use_depth_base)
+            and (not use_prop_history_base)
+        )
         self.sys_iden = sys_iden
 
+        priv_enc_in_dim = 0
         if self.use_priv_info:
-            if env_name in ['PickCube', 'PickSingleYCB', 'PickSingleEGAD']:
+            if env_name in ["PickCube", "PickSingleYCB", "PickSingleEGAD"]:
                 priv_enc_in_dim = 4 + 3 + 4
-            elif env_name in ['TurnFaucet']:
+            elif env_name == "TurnFaucet":
                 priv_enc_in_dim = 4 + 1 + 4 + 3
-            elif env_name in ['PegInsertionSide']:
+            elif env_name == "PegInsertionSide":
                 priv_enc_in_dim = 4 + 3
+            else:
+                raise ValueError(f"Unsupported env_name: {env_name}")
             priv_enc_in_dim += object_emb_dim * 2
             priv_env_out_dim = priv_enc_in_dim - 4
 
@@ -51,18 +61,12 @@ class FeaturesExtractorRMA(BaseFeaturesExtractor):
         # the output dim of feature extractor
         features_dim = priv_env_out_dim
         for k, v in observation_space.items():
-            if k in ['agent_state', 'object1_state', 'goal_info']:
+            if k in ["agent_state", "object1_state", "goal_info"]:
                 features_dim += v._shape[0]
-        # if env_name in ['PickCube', 'PickSingleYCB', 'PickSingleEGAD']:
-        #     features_dim = (9 + 9 + 7 + 7 + 6 + priv_env_out_dim + 3 * 3)
-        # elif env_name in ['TurnFaucet']:
-        #     features_dim = (9 + 9 + 7 + 7 + 6 + priv_env_out_dim + 1)
-        # elif env_name in ['PegInsertionSide']:
-        #     features_dim = (9 + 9 + 7 + 7 + 6 + priv_env_out_dim + 3 * 3 + 5)
 
         self.use_prop_history_base = use_prop_history_base
         self.use_depth_base = use_depth_base
-        # if use depth than it's doesn't use object state and priv info
+        # use_depth_base replaces object-state + privileged info with a depth CNN.
         if use_depth_base:
             cnn_output_dim = 64
             features_dim += cnn_output_dim + 41 - 6  # cam param + img embedding
@@ -76,28 +80,33 @@ class FeaturesExtractorRMA(BaseFeaturesExtractor):
         if self.use_depth_base:
             self.img_cnn = DepthCNN(out_dim=cnn_output_dim)
         if use_prop_history_base:
-            self.prop_cnn = nn.Sequential(ProprioCNN(in_dim=50), Flatten(),
-                                          nn.Linear(39 * 2, prop_cnn_out_dim))
+            self.prop_cnn = nn.Sequential(
+                ProprioCNN(in_dim=50), Flatten(), nn.Linear(39 * 2, prop_cnn_out_dim)
+            )
         if self.use_priv_info:
-            self.priv_enc = MLP(units=[128, 128, priv_env_out_dim],
-                                input_size=priv_enc_in_dim)
+            self.priv_enc = MLP(
+                units=[128, 128, priv_env_out_dim], input_size=priv_enc_in_dim
+            )
         self.obj_id_emb = nn.Embedding(80, object_emb_dim)
         self.obj_type_emb = nn.Embedding(50, object_emb_dim)
 
-    def forward(self,
-                obs_dict,
-                use_pred_e: bool = False,
-                return_e_gt: bool = False,
-                pred_e: th.Tensor = None) -> th.Tensor:
+    def forward(
+        self,
+        obs_dict,
+        use_pred_e: bool = False,
+        return_e_gt: bool = False,
+        pred_e: Optional[th.Tensor] = None,
+    ) -> th.Tensor:
 
         priv_enc_in = []
 
         if self.use_priv_info:
-            obj_type_emb = self.obj_type_emb(
-                obs_dict['object1_type_id'].int()).squeeze(1)
-            obj_emb = self.obj_id_emb(obs_dict['object1_id'].int()).squeeze(1)
+            obj_type_emb = self.obj_type_emb(obs_dict["object1_type_id"].int()).squeeze(
+                1
+            )
+            obj_emb = self.obj_id_emb(obs_dict["object1_id"].int()).squeeze(1)
             priv_enc_in.extend([obj_type_emb, obj_emb])
-            priv_enc_in.append(obs_dict['obj1_priv_info'])
+            priv_enc_in.append(obs_dict["obj1_priv_info"])
             priv_enc_in = th.cat(priv_enc_in, dim=1)
 
             if self.sys_iden:
@@ -109,29 +118,28 @@ class FeaturesExtractorRMA(BaseFeaturesExtractor):
             else:
                 env_vec = e_gt
             obs_list = [
-                obs_dict['agent_state'], obs_dict['object1_state'], env_vec,
-                obs_dict['goal_info']
+                obs_dict["agent_state"],
+                obs_dict["object1_state"],
+                env_vec,
+                obs_dict["goal_info"],
             ]
         else:
             e_gt = None
             if self.use_depth_base:
-                obs_list = [obs_dict['agent_state'], obs_dict['goal_info']]
-                img_emb = self.img_cnn(obs_dict['image'])
-                obs_list.extend([img_emb, obs_dict['camera_param']])
+                obs_list = [obs_dict["agent_state"], obs_dict["goal_info"]]
+                img_emb = self.img_cnn(obs_dict["image"])
+                obs_list.extend([img_emb, obs_dict["camera_param"]])
             else:
                 obs_list = [
-                    obs_dict['agent_state'], obs_dict['object1_state'],
-                    obs_dict['goal_info']
+                    obs_dict["agent_state"],
+                    obs_dict["object1_state"],
+                    obs_dict["goal_info"],
                 ]
             if self.use_prop_history_base:
-                prop = self.prop_cnn(obs_dict['prop_act_history'])
+                prop = self.prop_cnn(obs_dict["prop_act_history"])
                 obs_list.append(prop)
 
-        try:
-            obs = th.cat(obs_list, dim=-1)
-        except:
-            print("error")
-            breakpoint()
+        obs = th.cat(obs_list, dim=-1)
 
         if return_e_gt:
             return obs, e_gt
@@ -142,7 +150,7 @@ class FeaturesExtractorRMA(BaseFeaturesExtractor):
 class MLP(nn.Module):
 
     def __init__(self, units, input_size):
-        super(MLP, self).__init__()
+        super().__init__()
         layers = []
         for output_size in units:
             layers.append(nn.Linear(input_size, output_size))
@@ -157,17 +165,10 @@ class MLP(nn.Module):
 
 class AdaptationNet(nn.Module):
 
-    def __init__(self,
-                 observation_space=None,
-                 in_dim=50,
-                 out_dim=16,
-                 use_depth=False):
+    def __init__(self, observation_space=None, in_dim=50, out_dim=16, use_depth=False):
 
-        super(AdaptationNet, self).__init__()
+        super().__init__()
         self.use_depth = use_depth
-
-        dep_cnn_output_dim = 0
-        camera_param_dim = 0
 
         if use_depth:
             dep_cnn_output_dim = 64
@@ -177,35 +178,26 @@ class AdaptationNet(nn.Module):
             camera_param_dim = 0
         self.perc_cnn = DepthCNN(out_dim=dep_cnn_output_dim)
         self.prop_cnn = ProprioCNN(in_dim)
-        self.fc = nn.Linear(39 * 2 + camera_param_dim + dep_cnn_output_dim,
-                            out_dim)
+        self.fc = nn.Linear(39 * 2 + camera_param_dim + dep_cnn_output_dim, out_dim)
         self.relu = nn.ReLU()
         self.fc2 = nn.Linear(out_dim, out_dim)
 
     def forward(self, x):
-        # print x
-        prop, perc, cparam = x['prop'], x['perc'], x['cparam']
-        # print(f"prop mean {prop.mean():.3f} min {prop.min():.3f} max {prop.max()}")
-        # print(f"perc mean {perc.mean():.3f} min {perc.min():.3f} max {perc.max()}")
-        # print(f"cparam mean {cparam.mean():.3f} min {cparam.min():.3f} max {cparam.max()}")
+        prop, perc, cparam = x["prop"], x["perc"], x["cparam"]
         prop = self.prop_cnn(prop)
-        # print(f"new prop mean {prop.mean():.3f} min {prop.min():.3f} max {prop.max()}")
         obs = [prop]
         if self.use_depth:
             perc = self.perc_cnn(perc)
-            # print(f"new perc mean {prop.mean():.3f} min {perc.min():.3f} max {perc.max()}")
             obs.extend([perc, cparam])
         x = self.fc(th.cat(obs, dim=-1))
         x = self.fc2(self.relu(x))
-        # print(f"pred_e mean {x.mean():.3f} min {x.min():.3f} max {x.max():.3f}")
-        # print("")
         return x
 
 
 class DepthCNN(nn.Module):
 
     def __init__(self, out_dim):
-        super(DepthCNN, self).__init__()
+        super().__init__()
         self.conv1 = nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1)
         self.bn1 = nn.BatchNorm2d(32)
         self.relu1 = nn.ReLU()
@@ -221,21 +213,6 @@ class DepthCNN(nn.Module):
         self.fc1 = nn.Linear(128 * 4 * 4, 256)
         self.relu4 = nn.ReLU()
         self.fc2 = nn.Linear(256, out_dim)
-        # self.conv1 = nn.Conv2d(4, 64, kernel_size=3, stride=1, padding=1)
-        # self.bn1 = nn.BatchNorm2d(64)
-        # self.relu1 = nn.ReLU()
-        # self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
-        # self.conv2 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
-        # self.bn2 = nn.BatchNorm2d(128)
-        # self.relu2 = nn.ReLU()
-        # self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
-        # self.conv3 = nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1)
-        # self.bn3 = nn.BatchNorm2d(256)
-        # self.relu3 = nn.ReLU()
-        # self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2)
-        # self.fc1 = nn.Linear(256 * 4 * 4, 512)
-        # self.relu4 = nn.ReLU()
-        # self.fc2 = nn.Linear(512, out_dim)
 
     def forward(self, x):
         # x has shape [n_env, times, 1, h, w]
@@ -253,7 +230,6 @@ class DepthCNN(nn.Module):
         x = self.relu3(x)
         x = self.pool3(x)
         x = x.view(-1, 128 * 4 * 4)
-        # x = x.view(-1, 256 * 4 * 4)
         x = self.fc1(x)
         x = self.relu4(x)
         x = self.fc2(x)
@@ -295,16 +271,16 @@ class ProprioCNN(nn.Module):
         # ln_shape = 11
         ln4 = nn.LayerNorm((39, ln_shape))
         self.temporal_aggregation = nn.Sequential(
-            nn.Conv1d(39, 39, (9, ), stride=(2, )),
+            nn.Conv1d(39, 39, (9,), stride=(2,)),
             ln1,
             nn.ReLU(inplace=True),
-            nn.Conv1d(39, 39, (7, ), stride=(2, )),
+            nn.Conv1d(39, 39, (7,), stride=(2,)),
             ln2,
             nn.ReLU(inplace=True),
-            nn.Conv1d(39, 39, (5, ), stride=(1, )),
+            nn.Conv1d(39, 39, (5,), stride=(1,)),
             ln3,
             nn.ReLU(inplace=True),
-            nn.Conv1d(39, 39, (3, ), stride=(1, )),
+            nn.Conv1d(39, 39, (3,), stride=(1,)),
             ln4,
             nn.ReLU(inplace=True),
         )
@@ -315,16 +291,3 @@ class ProprioCNN(nn.Module):
         prop = self.temporal_aggregation(prop)  # (N, 39, 3)
         prop = prop.flatten(1)
         return prop
-
-
-def calc_activation_shape_2d(dim,
-                             ksize,
-                             dilation=(1, 1),
-                             stride=(1, 1),
-                             padding=(0, 0)):
-
-    def shape_each_dim(i):
-        odim_i = dim[i] + 2 * padding[i] - dilation[i] * (ksize[i] - 1) - 1
-        return (odim_i / stride[i]) + 1
-
-    return int(np.floor(shape_each_dim(0))), int(np.floor(shape_each_dim(1)))

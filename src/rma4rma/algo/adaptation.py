@@ -1,30 +1,32 @@
 import os
 import time
-from typing import Type, Dict
 
+import gymnasium.spaces as spaces
 import numpy as np
 import torch as th
-import gymnasium.spaces as spaces
 from stable_baselines3 import PPO
-from stable_baselines3.common.utils import obs_as_tensor, get_device
 from stable_baselines3.common.type_aliases import GymEnv
+from stable_baselines3.common.utils import get_device, obs_as_tensor
 from torch.utils.tensorboard import SummaryWriter
 
-# from .model.models import ProprioAdaptTConv
-from algo.misc import tprint, AverageScalarMeter
+from rma4rma.algo.misc import AverageScalarMeter, tprint
 
 
-class ProprioAdapt(object):
+class ProprioAdapt:
+    """Stage-2 adapter training loop.
+
+    Freezes the base policy and environment encoder, and trains the adapter
+    module via L² regression between the predicted and ground-truth
+    environment embeddings.
+    """
 
     def __init__(
         self,
-        model: Type[PPO],
+        model: PPO,
         env: GymEnv,
         writer: SummaryWriter,
         save_dir: str,
     ):
-        # whether to use the sys_iden approach to have the adaptation predict
-        # the privileged information directly
         self.model = model
         self.num_timesteps = 0
         self.device = get_device("auto")
@@ -33,7 +35,6 @@ class ProprioAdapt(object):
         self.policy = model.policy
         self.env = env
         self.logger = writer
-        # self.eval_callback = eval_callback
 
         self.action_space = env.action_space
         self.step_reward = th.zeros(env.num_envs, dtype=th.float32)
@@ -45,21 +46,18 @@ class ProprioAdapt(object):
         # ---- Optim ----
         adapt_params = []
         for name, p in self.policy.named_parameters():
-            if 'adapt_tconv' in name:
+            if "adapt_tconv" in name:
                 adapt_params.append(p)
             else:
                 p.requires_grad = False
-        self.optim = th.optim.Adam(adapt_params, lr=1e-4
-                                   # lr=1e-3
-                                   )
+        self.optim = th.optim.Adam(adapt_params, lr=1e-4)
 
     def get_env(self):
         return None
 
-    def learn(self, ):
-        '''training the adaptation module
-        '''
-        if hasattr(self.model, 'adaptation_steps'):
+    def learn(self):
+        """Training the adaptation module."""
+        if hasattr(self.model, "adaptation_steps"):
             n_steps = self.model.adaptation_steps
             self.best_succ_rate = self.model.best_succ_rate
         else:
@@ -80,7 +78,7 @@ class ProprioAdapt(object):
                 obs_tensor[key] = tensor.detach()
             actions, _, _, e, e_gt = self.policy(obs_tensor, adapt_trn=True)
 
-            loss = ((e - e_gt.detach())**2).mean()
+            loss = ((e - e_gt.detach()) ** 2).mean()
             self.optim.zero_grad()
             loss.backward()
             self.optim.step()
@@ -90,8 +88,9 @@ class ProprioAdapt(object):
             clipped_actions = actions
             # Clip the actions to avoid out of bound error
             if isinstance(self.action_space, spaces.Box):
-                clipped_actions = np.clip(actions, self.action_space.low,
-                                          self.action_space.high)
+                clipped_actions = np.clip(
+                    actions, self.action_space.low, self.action_space.high
+                )
             new_obs, rewards, dones, infos = self.env.step(clipped_actions)
 
             # Statistics
@@ -100,7 +99,7 @@ class ProprioAdapt(object):
             self.policy.reset_buffer(dones=dones)
 
             if th.any(dones == 1):
-                n_succ = sum([infos[i]['success'] for i in range(50)])
+                n_succ = sum([infos[i]["success"] for i in range(50)])
                 self.succ_rate = n_succ / n_envs
 
             self.step_reward += rewards
@@ -119,22 +118,22 @@ class ProprioAdapt(object):
             self.log_tensorboard()
 
             if n_steps % 1e4 == 0:
-                self.save(
-                    os.path.join(self.nn_dir, f'{int(self.n_steps//1e4)}0K'))
-                self.save(os.path.join(self.nn_dir, f'latest_model'))
+                self.save(os.path.join(self.nn_dir, f"{int(self.n_steps//1e4)}0K"))
+                self.save(os.path.join(self.nn_dir, "latest_model"))
 
             if self.succ_rate >= self.best_succ_rate:
-                self.save(os.path.join(self.nn_dir, f'best_model'))
+                self.save(os.path.join(self.nn_dir, "best_model"))
                 self.best_succ_rate = self.succ_rate
                 self.model.best_succ_rate = self.best_succ_rate
 
             all_fps = self.num_timesteps / (time.time() - _t)
-            last_fps = self.env.num_envs / (time.time() - _last_t)
             _last_t = time.time()
-            info_string = f'Agent Steps: {int(n_steps // 1e3):04}k | FPS: {all_fps:.1f} | ' \
-                          f'Current Loss: {loss.item():.5f} | ' \
-                          f'Succ. Rate: {self.succ_rate:.5f} | ' \
-                          f'Best Succ. Rate: {self.best_succ_rate:.5f}'
+            info_string = (
+                f"Agent Steps: {int(n_steps // 1e3):04}k | FPS: {all_fps:.1f} | "
+                f"Current Loss: {loss.item():.5f} | "
+                f"Succ. Rate: {self.succ_rate:.5f} | "
+                f"Best Succ. Rate: {self.best_succ_rate:.5f}"
+            )
             tprint(info_string)
             n_steps += 1
 
@@ -146,25 +145,26 @@ class ProprioAdapt(object):
             self.num_timesteps += self.env.num_envs
 
     def log_tensorboard(self):
-        self.logger.add_scalar('adaptation_training/loss', self.loss,
-                               self.n_steps)
-        self.logger.add_scalar('adaptation_training/mean_episode_rewards',
-                               self.mean_eps_reward.get_mean(), self.n_steps)
-        self.logger.add_scalar('adaptation_training/mean_episode_length',
-                               self.mean_eps_length.get_mean(), self.n_steps)
-        self.logger.add_scalar('adaptation_training/success_rate',
-                               self.succ_rate, self.n_steps)
+        self.logger.add_scalar("adaptation_training/loss", self.loss, self.n_steps)
+        self.logger.add_scalar(
+            "adaptation_training/mean_episode_rewards",
+            self.mean_eps_reward.get_mean(),
+            self.n_steps,
+        )
+        self.logger.add_scalar(
+            "adaptation_training/mean_episode_length",
+            self.mean_eps_length.get_mean(),
+            self.n_steps,
+        )
+        self.logger.add_scalar(
+            "adaptation_training/success_rate", self.succ_rate, self.n_steps
+        )
 
     def save(self, name):
         self.model.save(name)
 
-    def compute_mean_adaptor_loss(self, ):
-        '''compute the mean adaptor loss
-        '''
-        # if hasattr(self.model, 'adaptation_steps'):
-        #     n_steps = self.model.adaptation_steps
-        #     self.best_succ_rate = self.model.best_succ_rate
-        # else:
+    def compute_mean_adaptor_loss(self):
+        """Compute the mean adapter loss over a short rollout without updating weights."""
         n_steps = 0
         self.succ_rate = 0
 
@@ -182,7 +182,7 @@ class ProprioAdapt(object):
                 obs_tensor[key] = tensor.detach()
             actions, _, _, e, e_gt = self.policy(obs_tensor, adapt_trn=True)
 
-            loss = ((e - e_gt.detach())**2).mean()
+            loss = ((e - e_gt.detach()) ** 2).mean()
             losses.append(loss.item())
 
             # Rescale and perform action
@@ -190,8 +190,9 @@ class ProprioAdapt(object):
             clipped_actions = actions
             # Clip the actions to avoid out of bound error
             if isinstance(self.action_space, spaces.Box):
-                clipped_actions = np.clip(actions, self.action_space.low,
-                                          self.action_space.high)
+                clipped_actions = np.clip(
+                    actions, self.action_space.low, self.action_space.high
+                )
             new_obs, rewards, dones, infos = self.env.step(clipped_actions)
 
             # Statistics
@@ -200,7 +201,7 @@ class ProprioAdapt(object):
             self.policy.reset_buffer(dones=dones)
 
             if th.any(dones == 1):
-                n_succ = sum([infos[i]['success'] for i in range(50)])
+                n_succ = sum([infos[i]["success"] for i in range(50)])
                 self.succ_rate = n_succ / n_envs
 
             self.step_reward += rewards
@@ -218,17 +219,18 @@ class ProprioAdapt(object):
             self.model.adaptation_steps = n_steps
 
             if self.succ_rate >= self.best_succ_rate:
-                self.save(os.path.join(self.nn_dir, f'best_model'))
+                self.save(os.path.join(self.nn_dir, "best_model"))
                 self.best_succ_rate = self.succ_rate
                 self.model.best_succ_rate = self.best_succ_rate
 
             all_fps = self.num_timesteps / (time.time() - _t)
-            last_fps = self.env.num_envs / (time.time() - _last_t)
             _last_t = time.time()
-            info_string = f'Agent Steps: {int(n_steps // 1e3):04}k | FPS: {all_fps:.1f} | ' \
-                          f'Current Loss: {loss.item():.5f} | ' \
-                          f'Succ. Rate: {self.succ_rate:.5f} | ' \
-                          f'Best Succ. Rate: {self.best_succ_rate:.5f}'
+            info_string = (
+                f"Agent Steps: {int(n_steps // 1e3):04}k | FPS: {all_fps:.1f} | "
+                f"Current Loss: {loss.item():.5f} | "
+                f"Succ. Rate: {self.succ_rate:.5f} | "
+                f"Best Succ. Rate: {self.best_succ_rate:.5f}"
+            )
             tprint(info_string)
             n_steps += 1
 
