@@ -197,10 +197,7 @@ class PickCubeRMA(PickCubeEnv):
             return builder.build(name)
 
     def _load_actors(self):
-        """Called in `reset()` and `reconfigure()` things require reconfiguring the
-        simulation scene."""
-        # --- randomize object size ---
-        # self.cube_half_size += self._episode_rng.uniform(-0.005, 0.01, size=3)
+        """Called in ``reset()`` and ``reconfigure()`` — must reconfigure the scene."""
         if self.randomized_env:
             scale_h = self.scale_h_scdl(elapsed_steps=self.elapsed_steps)
             scale_l = self.scale_l_scdl(elapsed_steps=self.elapsed_steps)
@@ -210,8 +207,7 @@ class PickCubeRMA(PickCubeEnv):
         super()._load_actors()
 
     def _initialize_actors(self):
-        """Called in `initialize_episode()` things doesn't require reconfiguring the
-        simulation scene."""
+        """Called in ``initialize_episode()`` — does not reconfigure the scene."""
         super()._initialize_actors()
 
         # --- randomize friction ---
@@ -231,18 +227,9 @@ class PickCubeRMA(PickCubeEnv):
         for cs in self.obj.get_collision_shapes():
             cs.set_physical_material(phys_mtl)
 
-        # # randomize damping
-        # # from ActorDynamicBase class
-        # # https://github.com/haosulab/SAPIEN/blob/ab1d9a9fa1428484a918e61185ae9df2beb7cb30/python/py_package/core/pysapien/__init__.pyi#L161
-        # linear_damping = self._episode_rng.uniform(0, 1.0)
-        # angular_damping = self._episode_rng.uniform(0, 1.0)
-        # self.obj.set_damping(linear_damping, angular_damping)
-
     def _configure_cameras(self):
-        """Modified to only include agent camera."""
+        """Modified to only include the agent (hand-mounted) camera."""
         self._camera_cfgs = OrderedDict()
-        # self._camera_cfgs.update(parse_camera_cfgs(self._register_cameras()))
-
         self._agent_camera_cfgs = OrderedDict()
         if self._agent_cfg is not None:
             self._agent_camera_cfgs = parse_camera_cfgs(self._agent_cfg.cameras)
@@ -274,59 +261,20 @@ class PickCubeRMA(PickCubeEnv):
 
 @register_env("DR-PickCube-v0", max_episode_steps=100, override=True)
 class PickCube(PickCubeEnv):
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def _load_actors(self):
-        """Called in `reset()` and `reconfigure()` things require reconfiguring the
-        simulation scene."""
-        # --- randomize object size ---
-        # self.cube_half_size += self._episode_rng.uniform(-0.005, 0.01, size=3)
-        super()._load_actors()
-
-    def _initialize_actors(self):
-        """Called in `initialize_episode()` things doesn't require reconfiguring the
-        simulation scene."""
-        super()._initialize_actors()
-
-        # # --- randomize friction ---
-        # self.obj_friction = self._episode_rng.uniform(0.5, 1.0)
-        # phys_mtl = self._scene.create_physical_material(
-        #     static_friction=self.obj_friction,
-        #     dynamic_friction=self.obj_friction, restitution=0.1
-        # )
-        # # physical material only have friction related properties
-        # # https://github.com/haosulab/SAPIEN/blob/ab1d9a9fa1428484a918e61185ae9df2beb7cb30/python/py_package/core/pysapien/__init__.pyi#L1088
-        # for cs in self.obj.get_collision_shapes():
-        #     cs.set_physical_material(phys_mtl)
-
-        # # randomize damping
-        # # from ActorDynamicBase class
-        # # https://github.com/haosulab/SAPIEN/blob/ab1d9a9fa1428484a918e61185ae9df2beb7cb30/python/py_package/core/pysapien/__init__.pyi#L161
-        # linear_damping = self._episode_rng.uniform(0, 1.0)
-        # angular_damping = self._episode_rng.uniform(0, 1.0)
-        # self.obj.set_damping(linear_damping, angular_damping)
+    """Domain-randomization baseline variant of PickCube with a flat
+    observation dict (no privileged info)."""
 
     def _initialize_agent(self):
         if self.robot_uid == "panda":
             # fmt: off
-            # EE at [0.615, 0, 0.17]
-            # --- randomize joint position ---
-            # joint angle - original
-            #   the first 7dim: the 7dof of the arm,
-            #   the last  2dim: the end effector position
             qpos = np.array(
                 [0.0, np.pi / 8, 0, -np.pi * 5 / 8, 0, np.pi * 3 / 4,
                  np.pi / 4, 0.04, 0.04])
-
             # fmt: on
             qpos[:-2] += self._episode_rng.normal(
                 0, self.robot_init_qpos_noise, len(qpos) - 2
             )
             self.agent.reset(qpos)
-
-            # base position - original
             self.agent.robot.set_pose(sapien.Pose([-0.615, 0, 0]))
 
         elif self.robot_uid == "xmate3_robotiq":
@@ -341,17 +289,6 @@ class PickCube(PickCubeEnv):
         else:
             raise NotImplementedError(self.robot_uid)
 
-        # --- randomize joint stiffness and damping ---
-        # for j in self.agent.robot.get_active_joints():
-        #     # access with: j.stiffness, j.damping
-        #     # reference: stiffness=1000.0, damping=100.0
-        #     sti, dam = j.stiffness, j.damping
-        #     sti_scl = self._episode_rng.uniform(0.9, 1.1)
-        #     dam_scl = self._episode_rng.uniform(0.99, 1.01)
-        #     # sti_scl = self._episode_rng.uniform(1, 1)
-        #     # dam_scl = self._episode_rng.uniform(10, 10)
-        #     j.set_drive_property(stiffness=sti*sti_scl, damping=dam*dam_scl)
-
     def _build_cube(
         self,
         half_size,
@@ -360,50 +297,18 @@ class PickCube(PickCubeEnv):
         static=False,
         render_material: sapien.RenderMaterial = None,
     ):
-        """Build cube with varying mass."""
         if render_material is None:
             render_material = self._renderer.create_material()
             render_material.set_base_color(np.hstack([color, 1.0]))
 
         builder = self._scene.create_actor_builder()
-
-        # --- randomize mass ---
-        # self.randomize_mass_inertia:
-        # mass = self._episode_rng.uniform(0.01, 1)
-        # inertia_pose = sapien.Pose(self._episode_rng.uniform(-0.005, 0.005,
-        #                                                      size=3))
-        # # inertia_pose = sapien.Pose(self._episode_rng.uniform(0,0, size=3))
-        # # principle moments of inertia (a 3D vector)
-        # # https://sapien.ucsd.edu/docs/latest/apidoc/sapien.core.html#sapien.core.pysapien.ActorBuilder.set_mass_and_inertia
-        # pmi = np.zeros(3)
-        # builder.set_mass_and_inertia(mass, inertia_pose, pmi)
-
         builder.add_box_collision(half_size=half_size)
         builder.add_box_visual(half_size=half_size, material=render_material)
         if static:
             return builder.build_static(name)
-        else:
-            return builder.build(name)
+        return builder.build(name)
 
-    # def _get_obs_state_dict(self):
-    #     """Get (GT) state-based observations."""
-    #     return OrderedDict(
-    #         observation=np.concatenate([
-    #             flatten_state_dict(self._get_obs_agent()),
-    #             flatten_state_dict(OrderedDict(
-    #                                         obj_pos=self.obj.pose.p,
-    #                                         obj_ori=self.obj.pose.q))],axis=-1),
-    #         privaleged_info=flatten_state_dict(OrderedDict(
-    #                                         obj_mass=self.obj.mass,
-    #                                         obj_scale=self.cube_half_size,
-    #                                         obj_com=self.obj.cmass_local_pose.p,
-    #                                         obj_fri=self.obj_friction)),
-    #         goal_info=flatten_state_dict(OrderedDict(target_pos=self.goal_pos)
-    #                                                             ).astype("float32"),
-    #     )
     def _get_obs_state_dict(self):
-        """Get (GT) state-based observations."""
-        # --- randomize external disturbance, by adding noise to obs ---
         return OrderedDict(
             observation=flatten_state_dict(
                 OrderedDict(
@@ -416,11 +321,6 @@ class PickCube(PickCubeEnv):
                 )
             ).astype("float32"),
             privaleged_info=np.zeros(1).astype("float32"),
-            # privaleged_info=flatten_state_dict(OrderedDict(
-            #                             obj_mass=self.obj.mass,
-            #                             obj_scale=self.cube_half_size,
-            #                             obj_com=self.obj.cmass_local_pose.p,
-            #                             obj_fri=self.obj_friction)),
             goal_info=flatten_state_dict(OrderedDict(target_pos=self.goal_pos)).astype(
                 "float32"
             ),

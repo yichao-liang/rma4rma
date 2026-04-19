@@ -1,23 +1,17 @@
 import os
-import random
 from collections import OrderedDict
-from pathlib import Path
 
 import numpy as np
-from mani_skill2 import format_path
 from mani_skill2.envs.misc.turn_faucet import TurnFaucetEnv
 from mani_skill2.sensors.camera import parse_camera_cfgs
 from mani_skill2.utils.common import flatten_state_dict, random_choice
 from mani_skill2.utils.registration import register_env
 from mani_skill2.utils.sapien_utils import (
-    get_entity_by_name,
     get_pairwise_contact_impulse,
     hex2rgba,
-    look_at,
     set_articulation_render_material,
     vectorize_pose,
 )
-from numpy.linalg import norm
 from transforms3d.quaternions import axangle2quat, qmult
 
 from rma4rma.algo.misc import get_object_id, linear_schedule
@@ -351,32 +345,24 @@ class TurnFaucetRMA(TurnFaucetEnv):
         return obs_dict
 
     def _configure_cameras(self):
-        """Modified to only include agent camera."""
+        """Modified to only include the agent (hand-mounted) camera."""
         self._camera_cfgs = OrderedDict()
-        # self._camera_cfgs.update(parse_camera_cfgs(self._register_cameras()))
-
         self._agent_camera_cfgs = OrderedDict()
         if self._agent_cfg is not None:
             self._agent_camera_cfgs = parse_camera_cfgs(self._agent_cfg.cameras)
             self._camera_cfgs.update(self._agent_camera_cfgs)
 
     def _get_obs_state_dict(self):
-
-        self.step_counter += 1
         cmass_pose = self.target_link.pose * self.target_link.cmass_local_pose
 
-        # add external disturbance force
+        # Add external disturbance force.
         grasped = self.agent.check_grasp(self.target_link)
         if self.ext_disturbance:
-            # dist_force *= torch.pow(self.force_decay, self.dt / self.force_decay_interval)
-            # decay the prev force
+            # Decay the previous force, then sample a new one with prob 0.1.
             self.disturb_force *= self.force_decay
-            # sample whether to apply new force with probablity 0.1
             if self._episode_rng.uniform() < 0.1:
-                # sample 3D force for guassian distribution
                 self.disturb_force = self._episode_rng.normal(0, 0.1, 3)
                 self.disturb_force /= np.linalg.norm(self.disturb_force, ord=2)
-                # sample force scale
                 if self.auto_dr:
                     if self.eval_env and self.randomized_param == "force_scale":
                         self.force_scale = self.dr_params["force_scale"][1]
@@ -389,10 +375,9 @@ class TurnFaucetRMA(TurnFaucetEnv):
                     self.force_scale = self._episode_rng.uniform(0, self.fs_h)
                 if self.force_scale > self.max_force:
                     self.max_force = self.force_scale
-                # scale by object mass
+                # Scale by object mass.
                 self.disturb_force *= self.target_link.mass * self.force_scale
-                # apply the force to object
-            # only apply if the object is grasped
+            # Only apply the force if the object is grasped.
             if grasped:
                 self.target_link.add_force_at_point(self.disturb_force, cmass_pose.p)
 
@@ -411,19 +396,14 @@ class TurnFaucetRMA(TurnFaucetEnv):
         )
 
         if self.obs_noise:
-            # noise to proprioception
             qpos = self.agent.robot.get_qpos() + self.proprio_noise
             proprio = np.concatenate([qpos, self.agent.robot.get_qvel()])
-            # noise to obj position
             obj_pos = cmass_pose.p
             obj_pos += self.pos_noise
-            # noise to obj rotation
             obj_ang = cmass_pose.q
             obj_ang = qmult(obj_ang, self.rot_noise)
-            # obj_pose = np.concatenate([obj_pos, obj_ang])
         else:
             proprio = self.agent.get_proprioception()
-            # obj_pose = vectorize_pose(cmass_pose)
             obj_pos = cmass_pose.p
             obj_ang = cmass_pose.q
 
@@ -451,7 +431,6 @@ class TurnFaucetRMA(TurnFaucetEnv):
             )
 
         return OrderedDict(
-            # the same as the others
             agent_state=flatten_state_dict(
                 OrderedDict(
                     proprioception=proprio,
@@ -459,11 +438,8 @@ class TurnFaucetRMA(TurnFaucetEnv):
                     tcp_pose=vectorize_pose(self.tcp.pose),
                 )
             ),
-            # object 1
-            # 1, 7, 3 -> 14 (1, 7, 3, 3)
             object1_state=flatten_state_dict(
                 OrderedDict(
-                    # bbox_size=np.array([0]),
                     obj_pos=obj_pos,
                     tcp_to_obj_pos=obj_pos - self.tcp.pose.p,
                 )
@@ -471,14 +447,7 @@ class TurnFaucetRMA(TurnFaucetEnv):
             object1_type_id=self.obj1_type_num_id,
             object1_id=self.obj1_num_id,
             obj1_priv_info=flatten_state_dict(priv_info_dict),
-            # 7, 3, 3, 1 -> 1, 1
             goal_info=flatten_state_dict(
-                OrderedDict(
-                    target_angle_diff=np.array(self.target_angle_diff),
-                    # target_pose=vectorize_pose(self.box_hole_pose),
-                    # tcp_to_goal_pos=self.box_hole_pose.p - self.tcp.pose.p,
-                    # obj_to_goal_pos=self.box_hole_pose.p - self.peg.pose.p,
-                    # box_hole_radius=self.box_hole_radius,
-                )
+                OrderedDict(target_angle_diff=np.array(self.target_angle_diff))
             ).astype("float32"),
         )

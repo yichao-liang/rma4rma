@@ -53,8 +53,7 @@ class PickSingleRMA(PickSingleEnv):
             self.rot_scdl_h = np.pi * (10 / 180) * self.h_scl
             self.rot_scdl_l = -np.pi * (10 / 180) * self.h_scl
 
-        init_step, end_step = 1e6, 2e6  # 50M
-        # init_step, end_step  = 0, 1e5 # 50M
+        init_step, end_step = 1e6, 2e6
         if self.ext_disturbance:
             self.force_scale_scdl = linear_schedule(
                 0.0, self.force_scale_h, init_step, end_step
@@ -181,10 +180,8 @@ class PickSingleRMA(PickSingleEnv):
             # noise to obj rotation
             obj_ang = self.obj.pose.q
             obj_ang = qmult(obj_ang, self.rot_noise)
-            # obj_pose = np.concatenate([obj_pos, obj_ang])
         else:
             proprio = self.agent.get_proprioception()
-            # obj_pose = vectorize_pose(self.obj.pose)
             obj_pos = self.obj.pose.p
             obj_ang = self.obj.pose.q
 
@@ -291,14 +288,12 @@ class PickSingleRMA(PickSingleEnv):
         if options is None:
             options = dict()
 
-        # model_scale = options.pop("model_scale", None)
         model_id = options.pop("model_id", None)
         reconfigure = options.pop("reconfigure", False)
         _reconfigure = self._set_model(model_id, model_scale=None)
         reconfigure = _reconfigure or reconfigure
         options["reconfigure"] = reconfigure
 
-        # options["model_scale"] = model_scale
         return super().reset(seed=self._episode_seed, options=options)
 
     def _set_model(self, model_id, model_scale):
@@ -332,9 +327,7 @@ class PickSingleRMA(PickSingleEnv):
         )
 
         if model_scale is None:
-            # todo: comment out for finegrain plot
             model_scales = self.model_db[self.model_id].get("scales")
-            # model_scales = [0.064]
             if model_scales is None:
                 model_scale = 0.064
             else:
@@ -377,52 +370,12 @@ class PickSingleRMA(PickSingleEnv):
             cs.set_physical_material(phys_mtl)
 
     def _configure_cameras(self):
-        """Modified to only include agent camera."""
+        """Modified to only include the agent (hand-mounted) camera."""
         self._camera_cfgs = OrderedDict()
-        # self._camera_cfgs.update(parse_camera_cfgs(self._register_cameras()))
-
         self._agent_camera_cfgs = OrderedDict()
         if self._agent_cfg is not None:
             self._agent_camera_cfgs = parse_camera_cfgs(self._agent_cfg.cameras)
             self._camera_cfgs.update(self._agent_camera_cfgs)
-
-
-# @register_env("PickSingleYCB-v2", max_episode_steps=200, override=True)
-# class PickSingleYCBRMAs(PickSingleRMA, PickSingleYCBEnv):
-#     def __init__(self, *args, **kwargs):
-#         # get object list for computing ids
-#         self.task_name = 'PickSingleYCB'
-#         parent_folder = Path(format_path(self.DEFAULT_ASSET_ROOT))/"models"
-#         self.object_list = [f for f in os.listdir(parent_folder)
-#                         if os.path.isdir(os.path.join(parent_folder, f))]
-#         self.obj_type_list = [f.rsplit("_", 1)[1] for f
-#                             in os.listdir(parent_folder)
-#                             if os.path.isdir(os.path.join(parent_folder, f))]
-#         self.obj_type_list = list(set(self.obj_type_list))
-#         super().__init__(*args, **kwargs)
-
-#     def _load_model(self):
-#         density = self.model_db[self.model_id].get("density", 1000)
-
-#         # randomize density
-#         if self.randomized_env:
-#             self.dens_h = self.dens_h_scdl(elapsed_steps=self.step_counter)
-#             self.dens_l = self.dens_l_scdl(elapsed_steps=self.step_counter)
-#             self.dens_mult = self._episode_rng.uniform(self.dens_l, self.dens_h)
-#         else:
-#             self.dens_mult = np.array(1)
-#         density *= self.dens_mult
-#         # normalize density
-#         self.obj_density = density / 1000
-
-#         self.obj = build_actor_ycb(
-#             self.model_id,
-#             self._scene,
-#             scale=self.model_scale,
-#             density=self.obj_density,
-#             root_dir=self.asset_root,
-#         )
-#         self.obj.name = self.model_id
 
 
 @register_env("PickSingleEGAD-v2", max_episode_steps=200, override=True)
@@ -515,8 +468,7 @@ class PickSingleYCBRMA(PickSingleYCBEnv):
                 prop_position=[0.0, 0.0],
             )
         else:
-            init_step, end_step = 1e6, 2e6  # 50M
-            # init_step, end_step  = 0, 1e5 # 50M
+            init_step, end_step = 1e6, 2e6
             if self.ext_disturbance:
                 self.force_scale_scdl = linear_schedule(
                     0.0, self.force_scale_h, init_step, end_step
@@ -614,8 +566,7 @@ class PickSingleYCBRMA(PickSingleYCBEnv):
         # add external disturbance force
         grasped = self.agent.check_grasp(self.obj)
         if self.ext_disturbance:
-            # dist_force *= torch.pow(self.force_decay, self.dt / self.force_decay_interval)
-            # decay the prev force
+            # Decay the previous force.
             self.disturb_force *= self.force_decay
             # sample whether to apply new force with probablity 0.1
             if self._episode_rng.uniform() < 0.1:
@@ -662,10 +613,8 @@ class PickSingleYCBRMA(PickSingleYCBEnv):
             # noise to obj rotation
             obj_ang = self.obj.pose.q
             obj_ang = qmult(obj_ang, self.rot_noise)
-            # obj_pose = np.concatenate([obj_pos, obj_ang])
         else:
             proprio = self.agent.get_proprioception()
-            # obj_pose = vectorize_pose(self.obj.pose)
             obj_pos = self.obj.pose.p
             obj_ang = self.obj.pose.q
 
@@ -929,10 +878,8 @@ class PickSingleYCBRMA(PickSingleYCBEnv):
             cs.set_physical_material(phys_mtl)
 
     def _configure_cameras(self):
-        """Modified to only include agent camera."""
+        """Modified to only include the agent (hand-mounted) camera."""
         self._camera_cfgs = OrderedDict()
-        # self._camera_cfgs.update(parse_camera_cfgs(self._register_cameras()))
-
         self._agent_camera_cfgs = OrderedDict()
         if self._agent_cfg is not None:
             self._agent_camera_cfgs = parse_camera_cfgs(self._agent_cfg.cameras)

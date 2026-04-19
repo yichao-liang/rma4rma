@@ -112,10 +112,3 @@ class StackCubeRMA(StackCubeEnv):
             cs.set_physical_material(phys_mtl1)
         for cs in self.cubeB.get_collision_shapes():
             cs.set_physical_material(phys_mtl2)
-
-        # # randomize damping
-        # # from ActorDynamicBase class
-        # # https://github.com/haosulab/SAPIEN/blob/ab1d9a9fa1428484a918e61185ae9df2beb7cb30/python/py_package/core/pysapien/__init__.pyi#L161
-        # linear_damping = self._episode_rng.uniform(0, 1.0)
-        # angular_damping = self._episode_rng.uniform(0, 1.0)
-        # self.obj.set_damping(linear_damping, angular_damping)

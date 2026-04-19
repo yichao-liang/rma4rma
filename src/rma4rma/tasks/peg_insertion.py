@@ -1,10 +1,9 @@
-import random
 from collections import OrderedDict
 
 import numpy as np
 from mani_skill2.envs.assembly.peg_insertion_side import PegInsertionSideEnv
 from mani_skill2.sensors.camera import parse_camera_cfgs
-from mani_skill2.utils.common import flatten_state_dict, random_choice
+from mani_skill2.utils.common import flatten_state_dict
 from mani_skill2.utils.registration import register_env
 from mani_skill2.utils.sapien_utils import (
     get_pairwise_contact_impulse,
@@ -165,10 +164,8 @@ class PegInsertionRMA(PegInsertionSideEnv):
         return obs_dict
 
     def _configure_cameras(self):
-        """Modified to only include agent camera."""
+        """Modified to only include the agent (hand-mounted) camera."""
         self._camera_cfgs = OrderedDict()
-        # self._camera_cfgs.update(parse_camera_cfgs(self._register_cameras()))
-
         self._agent_camera_cfgs = OrderedDict()
         if self._agent_cfg is not None:
             cam_cfg = self._agent_cfg.cameras
@@ -207,8 +204,7 @@ class PegInsertionRMA(PegInsertionSideEnv):
                     *self.dr_params["prop_position"], 9
                 )
         elif self.obs_noise:
-            # noise tok proprioception
-            # noise to proprioception
+            # Noise to proprioception, position, and rotation observations.
             self.proprio_h = self.proprio_h_scdl(elapsed_steps=self.step_counter)
             self.proprio_l = self.proprio_l_scdl(elapsed_steps=self.step_counter)
             self.proprio_noise = self._episode_rng.uniform(
@@ -227,8 +223,7 @@ class PegInsertionRMA(PegInsertionSideEnv):
         return super().reset(seed, options)
 
     def _load_actors(self):
-        """Modified to randomize scale."""
-        # self.set_episode_rng(1)
+        """Modified to randomize scale, density, and friction."""
         self._add_ground(render=self.bg_name is None)
 
         # added to randomize scale
@@ -270,7 +265,6 @@ class PegInsertionRMA(PegInsertionSideEnv):
         self.obj_density = density / 1000
 
         # peg
-        # length, radius = 0.1, 0.02
         length = self._episode_rng.uniform(0.075, 0.125) * self.model_scale_mult
         radius = self._episode_rng.uniform(0.015, 0.025) * self.model_scale_mult
         builder = self._scene.create_actor_builder()
@@ -340,19 +334,14 @@ class PegInsertionRMA(PegInsertionSideEnv):
         self.box_hole_radius = inner_radius
 
     def _get_obs_state_dict(self):
-
         grasped = self.agent.check_grasp(self.peg)
-        # add external disturbance force
+        # Add external disturbance force.
         if self.ext_disturbance:
-            # dist_force *= torch.pow(self.force_decay, self.dt / self.force_decay_interval)
-            # decay the prev force
+            # Decay the previous force, then sample a new one with prob 0.1.
             self.disturb_force *= self.force_decay
-            # sample whether to apply new force with probablity 0.1
             if self._episode_rng.uniform() < 0.1:
-                # sample 3D force for guassian distribution
                 self.disturb_force = self._episode_rng.normal(0, 0.1, 3)
                 self.disturb_force /= np.linalg.norm(self.disturb_force, ord=2)
-                # sample force scale
                 if self.auto_dr:
                     if self.eval_env and self.randomized_param == "force_scale":
                         self.force_scale = self.dr_params["force_scale"][1]
@@ -365,11 +354,9 @@ class PegInsertionRMA(PegInsertionSideEnv):
                     self.force_scale = self._episode_rng.uniform(0, self.fs_h)
                 if self.force_scale > self.max_force:
                     self.max_force = self.force_scale
-                # scale by object mass
+                # Scale by object mass.
                 self.disturb_force *= self.peg.mass * self.force_scale
-                # apply the force to object
-            # only apply if the object is grasped
-            # if self.agent.check_grasp(self.peg):
+            # Only apply the force if the object is grasped.
             if grasped:
                 self.peg.add_force_at_point(self.disturb_force, self.peg.pose.p)
 
@@ -384,24 +371,18 @@ class PegInsertionRMA(PegInsertionSideEnv):
         )
 
         if self.obs_noise:
-            # noise to proprioception
             qpos = self.agent.robot.get_qpos() + self.proprio_noise
             proprio = np.concatenate([qpos, self.agent.robot.get_qvel()])
-            # noise to obj position
             obj_pos = self.peg.pose.p
             obj_pos += self.pos_noise
-            # noise to obj rotation
             obj_ang = self.peg.pose.q
             obj_ang = qmult(obj_ang, self.rot_noise)
-            # obj_pose = np.concatenate([obj_pos, obj_ang])
         else:
             proprio = self.agent.get_proprioception()
-            # obj_pose = vectorize_pose(self.peg.pose)
             obj_pos = self.peg.pose.p
             obj_ang = self.peg.pose.q
 
         priv_info_dict = OrderedDict(
-            # obj_ang=obj_ang,
             bbox_size=self.peg_half_size,
             obj_density=self.obj_density,
             obj_friction=self.obj_friction,
